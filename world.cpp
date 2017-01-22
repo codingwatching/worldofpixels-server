@@ -30,7 +30,7 @@ bool Chunk::set_data(const uint8_t x, const uint8_t y, const RGB clr) {
 	
 void Chunk::send_data(uWS::WebSocket<uWS::SERVER> ws) {
 	uint8_t msg[16 * 16 * 3 + 9];
-	msg[0] = CHUNKDATA;
+	msg[0] = CHUNK_DATA;
 	memcpy(&msg[1], &cx, 4);
 	memcpy(&msg[5], &cy, 4);
 	memcpy(&msg[9], &data[0], sizeof(data));
@@ -53,8 +53,7 @@ void Chunk::clear(){
 /* World class functions */
 
 World::World(const std::string& path, const std::string& name)
-	: pids(0),
-	  db(path + name + "/"),
+	: db(path + name + "/"),
 	  name(name) {
 	uv_timer_init(uv_default_loop(), &upd_hdl);
 	upd_hdl.data = this;
@@ -65,10 +64,6 @@ World::~World() {
 		delete chunk.second;
 	}
 	std::cout << "World unloaded: " << name << std::endl;
-}
-
-uint32_t World::get_id() {
-	return ++pids;
 }
 
 void World::add_cli(Client * const cl) {
@@ -83,7 +78,7 @@ void World::upd_cli(Client * const cl) {
 }
 
 void World::rm_cli(Client * const cl) {
-	plleft.emplace(cl->id);
+	plleft.emplace(cl->get_id());
 	clients.erase(cl);
 	plupdates.erase(cl);
 	if(!clients.size()){
@@ -94,7 +89,7 @@ void World::rm_cli(Client * const cl) {
 
 Client * World::get_cli(const uint32_t id) const {
 	for(const auto client : clients){
-		if(id == client->id){
+		if(id == client->get_id()){
 			return client;
 		}
 	}
@@ -114,9 +109,10 @@ void World::send_updates(uv_timer_t * const t) {
 	uint8_t * const upd = (uint8_t *) malloc(1 + 1 + wrld->plupdates.size() * (sizeof(uint32_t) + sizeof(pinfo_t))
 	                                   + sizeof(uint16_t) + wrld->pxupdates.size() * sizeof(pixupd_t)
 	                                   + 1 + sizeof(uint32_t) * wrld->plleft.size());
-	upd[0] = UPDATE;
+	upd[0] = WORLD_UPDATE;
 	for(auto client : wrld->plupdates){
-		memcpy((void *)(upd + offs), (void *)&client->id, sizeof(uint32_t));
+		uint32_t id = client->get_id();
+		memcpy((void *)(upd + offs), (void *)&id, sizeof(uint32_t));
 		offs += sizeof(uint32_t);
 		memcpy((void *)(upd + offs), (void *)client->get_pos(), sizeof(pinfo_t));
 		offs += sizeof(pinfo_t);
@@ -235,4 +231,56 @@ void World::save() const {
 
 bool World::is_empty() const {
 	return !clients.size();
+}
+
+/* WorldManager class functions */
+
+WorldManager::WorldManager(const std::string& path)
+	: path(path) { }
+
+WorldManager::~WorldManager() {
+	for(auto& world : worlds){
+		delete world.second;
+	}
+}
+
+bool WorldManager::join_world(Client * const cl, const std::string& name) {
+	World * const lastworld = cl->get_world();
+	if(lastworld){
+		lastworld->rm_cli(cl);
+		if(lastworld->is_empty()){
+			lastworld->safedelete();
+		}
+	}
+	if(!validate_name(name)){
+		return true;
+	}
+	World * const w = get_world(name);
+	if(w){
+		cl->set_world(w); // <-- !!
+		return false;
+	}
+	return true;
+}
+
+World * WorldManager::get_world(const std::string& name) {
+	const auto search = worlds.find(name);
+	World * w = nullptr;
+	if(search == worlds.end()){
+		worlds[name] = w = new World(path, name);
+	} else {
+		w = search->second;
+	}
+	return w;
+}
+
+void WorldManager::rm_world(World * const world) {
+	worlds.erase(world->name);
+	world->safedelete();
+}
+
+void WorldManager::save() const {
+	for(const auto& world : worlds){
+		world.second->save();
+	}
 }

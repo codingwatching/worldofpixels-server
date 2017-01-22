@@ -53,7 +53,7 @@ bool Commands::exec(Client * const cl, const std::string& msg) const {
 		if(cl->is_admin()){
 			auto search = admincmds.find(args[0]);
 			if(search != admincmds.end()){
-				std::cout << "Admin: " << cl->id << " (" << cl->get_world()->name
+				std::cout << "Admin: " << cl->get_id() << " (" << cl->get_world()->name
 					<< ", " << cl->ip << ") Executed: " << msg << std::endl;
 				search->second(cl, args);
 				return true;
@@ -73,9 +73,9 @@ void Commands::adminlogin(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if(!cl->is_admin() && args.size() == 2){
 		if(sv->is_adminpw(args[1])){
-			std::cout << "User: " << cl->id << " (" << cl->get_world()->name
+			std::cout << "User: " << cl->get_id() << " (" << cl->get_world()->name
 					<< ", " << cl->ip << ") Got admin!" << std::endl;
-			cl->promote();
+			cl->promote(3);
 		} else {
 			/* One try */
 			cl->safedelete(true);

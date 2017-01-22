@@ -3,7 +3,7 @@ UWS = uWebSockets/src/Extensions.cpp uWebSockets/src/Group.cpp uWebSockets/src/W
 INCLUDE = -I uWebSockets/src/
 LIBS = -luv -lcrypto -lssl -lz
 
-OBJS = commands.cpp color.cpp server.cpp database.cpp client.cpp world.cpp limiter.cpp main.cpp
+OBJS = commands.cpp color.cpp server.cpp database.cpp client.cpp world.cpp limiter.cpp nethandler.cpp misc.cpp main.cpp
 
 OUT = server
 

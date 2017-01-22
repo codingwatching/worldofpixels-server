@@ -4,29 +4,31 @@
 
 /* Client class functions */
 
-Client::Client(const uint32_t id, uWS::WebSocket<uWS::SERVER> ws, World * const wrld, const std::string& ip)
-		: pixupdlimit(CLIENT_PIXEL_UPD_RATELIMIT),
+Client::Client(NetStage * msg_hdlr, uWS::WebSocket<uWS::SERVER> ws, const std::string& ip)
+		: msghandler(msg_hdlr),
+		  pixupdlimit(CLIENT_PIXEL_UPD_RATELIMIT),
 		  chatlimit(CLIENT_CHAT_RATELIMIT),
 		  ws(ws),
-		  wrld(wrld),
+		  wrld(nullptr),
 		  penalty(0),
 		  handledelete(true),
-		  admin(false),
+		  rank(0),
+		  permissions(0),
 		  pos({0, 0, 0, 0, 0, 0}),
 		  lastclr({0, 0, 0}),
-		  id(id),
+		  id(0),
 		  ip(ip) {
-	std::cout << "(" << wrld->name << ") New client! ID: " << id << std::endl;
 	uv_timer_init(uv_default_loop(), &idletimeout_hdl);
 	idletimeout_hdl.data = this;
 	uv_timer_start(&idletimeout_hdl, (uv_timer_cb) &Client::idle_timeout, 300000, 1200000);
-	uint8_t msg[5] = {SET_ID};
-	memcpy(&msg[1], (char *)&id, sizeof(id));
-	ws.send((const char *)&msg, sizeof(msg), uWS::BINARY);
 }
 
 Client::~Client() {
 	/* std::cout << "Client deleted! ID: " << id << std::endl; */
+}
+
+void Client::msg(const char * m, const size_t len) {
+	msghandler->process_msg(this, m, len);
 }
 
 bool Client::can_edit() {
@@ -34,11 +36,13 @@ bool Client::can_edit() {
 }
 
 void Client::get_chunk(const int32_t x, const int32_t y) const {
-	wrld->send_chunk(ws, x, y);
+	if(wrld){
+		wrld->send_chunk(ws, x, y);
+	}
 }
 
 void Client::put_px(const int32_t x, const int32_t y, const RGB clr) {
-	if(can_edit()){
+	if(can_edit() && wrld){
 		uint32_t distx = (x >> 4) - (pos.x >> 8); distx *= distx;
 		uint32_t disty = (y >> 4) - (pos.y >> 8); disty *= disty;
 		const uint32_t dist = sqrt(distx + disty);
@@ -57,19 +61,23 @@ void Client::put_px(const int32_t x, const int32_t y, const RGB clr) {
 }
 
 void Client::teleport(const int32_t x, const int32_t y) {
-	uint8_t msg[9] = {TELEPORT};
-	memcpy(&msg[1], (char *)&x, sizeof(x));
-	memcpy(&msg[5], (char *)&y, sizeof(y));
-	ws.send((const char *)&msg, sizeof(msg), uWS::BINARY);
-	pos.x = (x << 4) + 8;
-	pos.y = (y << 4) + 8;
-	wrld->upd_cli(this);
+	if(wrld){
+		uint8_t msg[9] = {TELEPORT};
+		memcpy(&msg[1], (char *)&x, sizeof(x));
+		memcpy(&msg[5], (char *)&y, sizeof(y));
+		ws.send((const char *)&msg, sizeof(msg), uWS::BINARY);
+		pos.x = (x << 4) + 8;
+		pos.y = (y << 4) + 8;
+		wrld->upd_cli(this);
+	}
 }
 
 void Client::move(const pinfo_t& newpos) {
-	pos = newpos;
-	wrld->upd_cli(this);
-	updated();
+	if(wrld){
+		pos = newpos;
+		wrld->upd_cli(this);
+		updated();
+	}
 }
 
 const pinfo_t * Client::get_pos() { /* Hmmm... */
@@ -81,7 +89,9 @@ bool Client::can_chat() {
 }
 
 void Client::chat(const std::string& msg) {
-	wrld->broadcast(get_nick() + ": " + msg);
+	if(wrld){
+		wrld->broadcast(get_nick() + ": " + msg);
+	}
 }
 
 void Client::tell(const std::string& msg) {
@@ -102,7 +112,9 @@ void Client::idle_timeout(uv_timer_t * const t) {
 void Client::safedelete(const bool close) {
 	if(handledelete){
 		handledelete = false;
-		wrld->rm_cli(this);
+		if(wrld){
+			wrld->rm_cli(this);
+		}
 		uv_timer_stop(&idletimeout_hdl);
 		uv_close((uv_handle_t *)&idletimeout_hdl, (uv_close_cb)([](uv_handle_t * const t){
 			delete (Client *)t->data;
@@ -113,11 +125,32 @@ void Client::safedelete(const bool close) {
 	}
 }
 
-void Client::promote() {
-	admin = true;
-	tell("Server: You are now an admin. Do /help for a list of commands.");
-	uint8_t msg[2] = {PERMISSIONS, 0}; /* Second byte doesn't do anything for now */
+void Client::send_cli_perms() {
+	uint8_t msg[10] = {PERMISSIONS, rank};
+	const uint16_t chatrate = chatlimit.get_rate();
+	const uint16_t pixlrate = pixupdlimit.get_rate();
+	memcpy((char *)&msg[2], (char *)&permissions, sizeof(uint32_t));
+	memcpy((char *)&msg[6], (char *)&pixlrate, sizeof(uint16_t));
+	memcpy((char *)&msg[8], (char *)&chatrate, sizeof(uint16_t));
 	ws.send((const char *)&msg, sizeof(msg), uWS::BINARY);
+}
+
+void Client::change_limits(const uint16_t rate, bool chat) {
+	if(chat){
+		chatlimit.change_rate(rate);
+	} else {
+		pixupdlimit.change_rate(rate);
+	}
+}
+
+void Client::promote(const uint8_t newrank) {
+	if(rank != newrank){
+		rank = newrank;
+		if(rank == ADMIN){
+			tell("Server: You are now an admin. Do /help for a list of commands.");
+		}
+		send_cli_perms();
+	}
 }
 
 bool Client::warn() {
@@ -129,7 +162,7 @@ bool Client::warn() {
 }
 
 bool Client::is_admin() const {
-	return admin;
+	return rank == ADMIN;
 }
 
 uWS::WebSocket<uWS::SERVER> Client::get_ws() const {
@@ -137,9 +170,41 @@ uWS::WebSocket<uWS::SERVER> Client::get_ws() const {
 }
 
 std::string Client::get_nick() const {
-	return (admin ? "(A) " + std::to_string(id) : std::to_string(id));
+	return (is_admin() ? "(A) " + name : name);
 }
 
 World * Client::get_world() const {
 	return wrld;
+}
+
+uint32_t Client::get_id() const {
+	return id;
+}
+
+void Client::set_id(const uint32_t newid) {
+	id = newid;
+}
+
+void Client::set_world(World * const newworld) {
+	wrld = newworld;
+	if(wrld){
+		size_t len = wrld->name.size();
+		uint8_t lenu8 = len >= 255 ? 255 : len;
+		char * msg = (char *)malloc(sizeof(uint8_t) * 2 + len);
+		const char * name = wrld->name.c_str();
+		msg[0] = JOIN_WORLD;
+		msg[1] = lenu8;
+		memcpy(msg + 2, name, len);
+		wrld->add_cli(this);
+		ws.send((const char *)msg, len + sizeof(uint8_t) * 2, uWS::BINARY);
+		free(msg);
+	}
+}
+
+void Client::set_name(const std::string& newname) {
+	name = newname;
+}
+
+void Client::set_msg_handler(NetStage * const newhandler) {
+	msghandler = newhandler;
 }

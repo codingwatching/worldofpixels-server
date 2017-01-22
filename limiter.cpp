@@ -20,6 +20,13 @@ bool limiter::Bucket::can_spend(const uint16_t count) {
 	return true;
 }
 
+void limiter::Bucket::change_rate(const uint16_t newrate) {
+	rate = newrate;
+}
+
+uint16_t limiter::Bucket::get_rate() const {
+	return rate;
+}
 
 limiter::Simple::Simple(const float rate)
 	: rate(rate) { }

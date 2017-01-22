@@ -4,10 +4,16 @@
 #include <unordered_map>
 #include <set>
 #include <fstream>
+#include <functional>
 #include "limiter.hpp"
 #include "config.hpp"
+#include "misc.hpp"
 
 class Client;
+
+#include "network.hpp"
+
+
 class Chunk;
 class World;
 class Server;
@@ -16,12 +22,11 @@ inline std::string key(int32_t i, int32_t j) {
 	return std::string((char *)&i, sizeof(i)) + std::string((char *)&j, sizeof(j));
 };
 
-enum server_messages : uint8_t {
-	SET_ID,
-	UPDATE,
-	CHUNKDATA,
-	TELEPORT,
-	PERMISSIONS
+enum ranks : uint8_t {
+	GUEST,
+	USER,
+	MODERATOR,
+	ADMIN
 };
 
 struct pinfo_t {
@@ -89,23 +94,28 @@ public:
 };
 
 class Client {
+	NetStage * msghandler;
 	limiter::Bucket pixupdlimit;
 	limiter::Bucket chatlimit;
 	uv_timer_t idletimeout_hdl;
 	uWS::WebSocket<uWS::SERVER> ws;
-	World * const wrld;
+	World * wrld;
 	uint16_t penalty;
 	bool handledelete;
-	bool admin;
+	uint8_t rank;
+	uint32_t permissions;
 	pinfo_t pos;
 	RGB lastclr;
+	uint32_t id;
+	std::string name;
 
 public:
-	const uint32_t id;
 	const std::string ip;
 
-	Client(const uint32_t id, uWS::WebSocket<uWS::SERVER>, World * const, const std::string& ip);
+	Client(NetStage *, uWS::WebSocket<uWS::SERVER>, const std::string& ip);
 	~Client();
+
+	void msg(const char *, const size_t);
 
 	bool can_edit();
 
@@ -124,8 +134,10 @@ public:
 	static void idle_timeout(uv_timer_t * const);
 
 	void safedelete(const bool close);
-
-	void promote();
+	
+	void send_cli_perms();
+	void change_limits(const uint16_t rate, bool chat);
+	void promote(const uint8_t rank);
 
 	bool warn();
 
@@ -133,10 +145,15 @@ public:
 	uWS::WebSocket<uWS::SERVER> get_ws() const;
 	std::string get_nick() const;
 	World * get_world() const;
+	uint32_t get_id() const;
+
+	void set_id(uint32_t);
+	void set_world(World * const);
+	void set_name(const std::string&);
+	void set_msg_handler(NetStage * const);
 };
 
 class World {
-	uint32_t pids;
 	uv_timer_t upd_hdl;
 	Database db;
 	std::set<Client *> clients;
@@ -174,6 +191,18 @@ public:
 	bool is_empty() const;
 };
 
+class WorldManager {
+	const std::string path;
+	std::unordered_map<std::string, World *> worlds;
+
+public:
+	WorldManager(const std::string& path);
+	~WorldManager();
+	bool join_world(Client * const, const std::string&);
+	World * get_world(const std::string&);
+	void rm_world(World * const);
+	void save() const;
+};
 
 class Commands {
 	std::unordered_map<std::string, std::function<void(Client * const, const std::vector<std::string>&)>> usrcmds;
@@ -198,11 +227,13 @@ public:
 class Server {
 	const uint16_t port;
 	const std::string adminpw;
-	const std::string path;
 	const Commands cmds;
 	uv_timer_t save_hdl;
-	std::unordered_map<std::string, World *> worlds;
+	WorldManager worlds;
 	uWS::Hub h;
+	LoginManager lm;
+	NetStagePlay netplay;
+	NetStageLogin netlogin;
 
 public:
 	Server(const uint16_t port, const std::string& adminpw, const std::string& path);
@@ -215,8 +246,6 @@ public:
 
 	void save_now() const;
 	static void save_chunks(uv_timer_t * const);
-
-	void join_world(uWS::WebSocket<uWS::SERVER>, const std::string&);
 
 	bool is_adminpw(const std::string&);
 };
