@@ -30,7 +30,7 @@ Client::~Client() {
 }
 
 bool Client::can_edit() {
-	return pixupdlimit.can_spend();
+	return is_admin() || pixupdlimit.can_spend();
 }
 
 void Client::get_chunk(const int32_t x, const int32_t y) const {
@@ -77,7 +77,7 @@ const pinfo_t * Client::get_pos() { /* Hmmm... */
 }
 
 bool Client::can_chat() {
-	return chatlimit.can_spend();
+	return is_admin() || chatlimit.can_spend();
 }
 
 void Client::chat(const std::string& msg) {
@@ -121,7 +121,7 @@ void Client::promote() {
 }
 
 bool Client::warn() {
-	if(++penalty > CLIENT_MAX_WARN_LEVEL){
+	if(!is_admin() && ++penalty > CLIENT_MAX_WARN_LEVEL){
 		safedelete(true);
 		return true;
 	}
