@@ -8,13 +8,134 @@ inline bool file_exists(const std::string& name) {
 
 Database::Database(const std::string& dir)
 	: dir(dir),
-	  created_dir(file_exists(dir)) { }
+	  created_dir(file_exists(dir)),
+	  changedPropsOrProtects(false) {
+		if (created_dir) {
+			std::string prop;
+			std::ifstream file(dir + "props.txt");
+			while (file.good()) {
+				std::getline(file, prop/*, '\0'*/);
+				if (prop.size() > 0) {
+					size_t keylen = prop.find_first_of(' ');
+					if (keylen != std::string::npos) {
+						worldProps[prop.substr(0, keylen)] = prop.substr(keylen + 1);
+					}
+				}
+				prop.clear();
+			}
+			file.close();
+			/*for (auto & kv : worldProps) {
+				std::cout << "'" << kv.first << "' = '" << kv.second << "'" << std::endl;
+			}*/
+			file.open(dir + "pchunks.bin", std::ios::binary);
+			if(file.good()){
+				file.seekg(0, std::fstream::end);
+				const size_t size = file.tellg();
+				if (size % 8) {
+					std::cerr << "Protection file corrupted, at: " << dir << ", ignoring." << std::endl;
+				} else {
+					const size_t itemsonfile = size / 8;
+					uint64_t * rankedarr = new uint64_t[itemsonfile];
+					file.seekg(0);
+					file.read((char*)rankedarr, size);
+					for (size_t i = 0; i < itemsonfile; i++) {
+						rankedChunks.emplace(rankedarr[i]);
+					}
+					delete[] rankedarr;
+				}
+			}
+			file.close();
+		}
+}
 
 Database::~Database() {
 	for(const auto& hdl : handles){
 		delete hdl.second;
 	}
 	handles.clear();
+	save();
+}
+
+void Database::save() {
+	if (!changedPropsOrProtects) return;
+	changedPropsOrProtects = false;
+	
+	if (worldProps.size() > 0) {
+		std::ofstream file(dir + "props.txt", std::ios_base::trunc);
+		for (auto & kv : worldProps) {
+			file << kv.first << " " << kv.second << std::endl;
+		}
+		file.flush();
+		file.close();
+	} else {
+		std::remove((dir + "props.txt").c_str());
+	}
+	if (rankedChunks.size() > 0) {
+		std::ofstream file(dir + "pchunks.bin", std::ios_base::binary | std::ios_base::trunc);
+		
+		if (file.good()) {
+			uint64_t * rankarr = new uint64_t[rankedChunks.size()];
+			size_t filesize = 0;
+			for (uint64_t pos : rankedChunks) {
+				rankarr[filesize++] = pos;
+			}
+			file.write((char*)rankarr, filesize * sizeof(uint64_t));
+			delete[] rankarr;
+		}
+		file.close();
+	} else {
+		std::remove((dir + "pchunks.bin").c_str());
+	}
+}
+
+void Database::setChunkProtection(int32_t x, int32_t y, bool state) {
+	union {
+		struct {
+			int32_t x;
+			int32_t y;
+		} p;
+		uint64_t pos;
+	} s;
+	s.p.x = x;
+	s.p.y = y;
+	//uint64_t p = (*(uint64_t *)&x) << 32 | (*(uint64_t *)&y);
+	if (state) {
+		rankedChunks.emplace(s.pos);
+	} else {
+		rankedChunks.erase(s.pos);
+	}
+	changedPropsOrProtects = true;
+}
+
+bool Database::getChunkProtection(int32_t x, int32_t y) {
+	//uint64_t p = (*(uint64_t *)&x) << 32 | (*(uint64_t *)&y);
+	union {
+		struct {
+			int32_t x;
+			int32_t y;
+		} p;
+		uint64_t pos;
+	} s;
+	s.p.x = x;
+	s.p.y = y;
+	return rankedChunks.find(s.pos) != rankedChunks.end();
+}
+
+std::string Database::getProp(std::string key, std::string defval) {
+	auto search = worldProps.find(key);
+	if (search != worldProps.end()) {
+		return search->second;
+	}
+	return defval;
+}
+
+void Database::setProp(std::string key, std::string value) {
+	if (!value.size()) {
+		worldProps.erase(key);
+	} else {
+		worldProps[key] = value;
+	}
+	changedPropsOrProtects = true;
 }
 
 std::fstream * Database::get_handle(const int32_t x, const int32_t y, const bool create) {
@@ -62,9 +183,9 @@ std::fstream * Database::get_handle(const int32_t x, const int32_t y, const bool
 				/* ugly, get first element inserted */
 				for(auto it2 = handles.begin(); ++it2 != handles.end(); ++it);
 				/* look at the inline key func for explanation */
-				std::cout << "Closed file handle to: '" << dir << "r."
+				/*std::cout << "Closed file handle to: '" << dir << "r."
 					<< *((int32_t *)it->first.c_str()) << "."
-					<< *((int32_t *)(it->first.c_str() + sizeof(int32_t))) << ".pxr'" << std::endl;
+					<< *((int32_t *)(it->first.c_str() + sizeof(int32_t))) << ".pxr'" << std::endl;*/
 				delete it->second;
 				handles.erase(it);
 			}

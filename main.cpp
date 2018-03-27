@@ -23,7 +23,10 @@ void handler(int s) {
 
 int main(int argc, char * argv[]) {
 	std::cout << "Starting server..." << std::endl;
-	srvptr = new Server(argc > 1 ? std::stoul(argv[1]) : 443, argc > 2 ? argv[2] : gen_random_str(10), argc > 3 ? argv[3] : "chunkdata");
+	srvptr = new Server(argc > 1 ? std::stoul(argv[1]) : 443,
+						argc > 2 ? argv[2] : gen_random_str(10),
+						argc > 3 ? argv[3] : gen_random_str(10),
+						argc > 4 ? argv[4] : "chunkdata");
 	
 	struct sigaction sigIntHandler;
 	sigIntHandler.sa_handler = handler;
@@ -33,6 +36,7 @@ int main(int argc, char * argv[]) {
 	sigaction(SIGINT, &sigIntHandler, NULL);
 	
 	srvptr->run();
+	delete srvptr;
 	
 	return 1;
 }

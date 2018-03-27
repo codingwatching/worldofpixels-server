@@ -15,7 +15,7 @@
 
 /* Maximum value is 255, maximum player updates every WORLD_UPDATE_RATE_MSEC */
 /* This is not the player limit */
-#define WORLD_MAX_PLAYER_UPDATES 72
+#define WORLD_MAX_PLAYER_UPDATES 128
 #define WORLD_MAX_PLAYER_LEFT_UPDATES 255
 
 /* Maximum value is 65535, max pixel updates every WORLD_UPDATE_RATE_MSEC */

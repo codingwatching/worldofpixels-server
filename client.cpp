@@ -4,19 +4,24 @@
 
 /* Client class functions */
 
-Client::Client(const uint32_t id, uWS::WebSocket<uWS::SERVER> ws, World * const wrld, const std::string& ip)
-		: pixupdlimit(CLIENT_PIXEL_UPD_RATELIMIT),
+Client::Client(const uint32_t id, uWS::WebSocket<uWS::SERVER> ws, World * const wrld, SocketInfo * si)
+		: nick(),
+		  pixupdlimit(0, 1),
 		  chatlimit(CLIENT_CHAT_RATELIMIT),
 		  ws(ws),
 		  wrld(wrld),
 		  penalty(0),
 		  handledelete(true),
-		  admin(false),
+		  rank(NONE),
+		  stealthadmin(false),
+		  suspicious(si->origin != "http://ourworldofpixels.com"),
+		  compressionEnabled(false),
 		  pos({0, 0, 0, 0, 0, 0}),
 		  lastclr({0, 0, 0}),
 		  id(id),
-		  ip(ip) {
-	std::cout << "(" << wrld->name << ") New client! ID: " << id << std::endl;
+		  si(si),
+		  mute(false){
+	std::cout << "(" << wrld->name << "/" << si->ip << ") New client! ID: " << id << std::endl;
 	uv_timer_init(uv_default_loop(), &idletimeout_hdl);
 	idletimeout_hdl.data = this;
 	uv_timer_start(&idletimeout_hdl, (uv_timer_cb) &Client::idle_timeout, 300000, 1200000);
@@ -38,18 +43,18 @@ void Client::get_chunk(const int32_t x, const int32_t y) const {
 }
 
 void Client::put_px(const int32_t x, const int32_t y, const RGB clr) {
-	if(can_edit()){
+	if(is_admin() || can_edit()){
 		uint32_t distx = (x >> 4) - (pos.x >> 8); distx *= distx;
 		uint32_t disty = (y >> 4) - (pos.y >> 8); disty *= disty;
 		const uint32_t dist = sqrt(distx + disty);
 		const uint32_t clrdist = ColourDistance(lastclr, clr);
-		if(dist > 3 || (clrdist != 0 && clrdist < 8)){
+		if(!is_admin() && (dist > 3 || (clrdist != 0 && clrdist < 8))){
 			if(warn() || dist > 3){
 				return;
 			}
 		}
 		lastclr = clr;
-		wrld->put_px(x, y, clr);
+		wrld->put_px(x, y, clr, rank);
 		updated();
 	} else {
 		warn();
@@ -77,11 +82,13 @@ const pinfo_t * Client::get_pos() { /* Hmmm... */
 }
 
 bool Client::can_chat() {
-	return chatlimit.can_spend();
+	return is_admin() || chatlimit.can_spend();
 }
 
 void Client::chat(const std::string& msg) {
-	wrld->broadcast(get_nick() + ": " + msg);
+	if (!mute) {
+		wrld->broadcast(get_nick() + ": " + msg);
+	}
 }
 
 void Client::tell(const std::string& msg) {
@@ -113,23 +120,41 @@ void Client::safedelete(const bool close) {
 	}
 }
 
-void Client::promote() {
-	admin = true;
-	tell("Server: You are now an admin. Do /help for a list of commands.");
-	uint8_t msg[2] = {PERMISSIONS, 0}; /* Second byte doesn't do anything for now */
+void Client::promote(uint8_t newrank, uint16_t prate) {
+	if (newrank == rank) {
+		return;
+	}
+	
+	
+	rank = newrank;
+	if (rank == ADMIN) {
+		tell("Server: You are now an admin. Do /help for a list of commands.");
+	} else if (rank == MODERATOR) {
+		tell("Server: You are now a moderator.");
+		set_pbucket(prate, 2);
+	} else if (rank == USER) {
+		set_pbucket(prate, 4);
+	} else {
+		set_pbucket(0, 1);
+	}
+	uint8_t msg[2] = {PERMISSIONS, rank};
 	ws.send((const char *)&msg, sizeof(msg), uWS::BINARY);
 }
 
 bool Client::warn() {
-	if(++penalty > CLIENT_MAX_WARN_LEVEL){
+	if(!is_admin() && ++penalty > CLIENT_MAX_WARN_LEVEL){
 		safedelete(true);
 		return true;
 	}
 	return false;
 }
 
+bool Client::is_mod() const {
+	return rank == MODERATOR;
+}
+
 bool Client::is_admin() const {
-	return admin;
+	return rank == ADMIN;
 }
 
 uWS::WebSocket<uWS::SERVER> Client::get_ws() const {
@@ -137,9 +162,38 @@ uWS::WebSocket<uWS::SERVER> Client::get_ws() const {
 }
 
 std::string Client::get_nick() const {
-	return (admin ? "(A) " + std::to_string(id) : std::to_string(id));
+	if (nick.size()) {
+		return nick;
+	}
+	std::string e(is_mod() && !stealthadmin ? "(M) " : is_admin() && !stealthadmin ? "(A) " : "");
+	e += std::to_string(id);
+	return e;
 }
 
 World * Client::get_world() const {
 	return wrld;
+}
+
+uint16_t Client::get_penalty() const {
+	return penalty;
+}
+
+uint8_t Client::get_rank() const {
+	return rank;
+}
+
+void Client::set_stealth(bool new_state) {
+	stealthadmin = new_state;
+}
+
+void Client::set_nick(const std::string & name) {
+	nick = name;
+}
+
+void Client::set_pbucket(uint16_t rate, uint16_t per) {
+	pixupdlimit.set(rate, per);
+	uint8_t msg[5] = {SET_PQUOTA};
+	memcpy(&msg[1], (char *)&rate, sizeof(rate));
+	memcpy(&msg[3], (char *)&per, sizeof(per));
+	ws.send((const char *)&msg, sizeof(msg), uWS::BINARY);
 }

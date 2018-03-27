@@ -1,2 +1,7 @@
 chunkdata
-server
+out
+prepareUpload.sh
+whitelist.txt
+bans.txt
+blacklist.txt
+keys.hpp

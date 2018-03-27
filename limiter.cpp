@@ -5,6 +5,14 @@ limiter::Bucket::Bucket(const uint16_t rate, const uint16_t per)
 	  per(per),
 	  allowance(rate) { }
 
+void limiter::Bucket::set(uint16_t nrate, uint16_t nper) {
+	rate = nrate;
+	per = nper < 1 ? 1 : nper;
+	if (allowance > nrate) {
+		allowance = nrate;
+	}
+}
+
 bool limiter::Bucket::can_spend(const uint16_t count) {
 	const auto now = std::chrono::steady_clock::now();
 	std::chrono::duration<float> passed = now - last_check;
