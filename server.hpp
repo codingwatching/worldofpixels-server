@@ -25,6 +25,7 @@ class World;
 class Server;
 
 size_t getUTF8strlen(const std::string& str);
+int64_t js_date_now();
 
 inline std::string key(int32_t i, int32_t j) {
 	return std::string((char *)&i, sizeof(i)) + std::string((char *)&j, sizeof(j));
@@ -134,7 +135,7 @@ public:
 	void send_data(uWS::WebSocket<uWS::SERVER>, bool compressed = false);
 	void save();
 
-	void clear();
+	void clear(const RGB);
 	uint8_t * get_data();
 	void set_data(char const * const, size_t);
 };
@@ -149,6 +150,7 @@ public:
 	};
 private:
 	std::string nick;
+	limiter::Bucket dellimit;
 	limiter::Bucket pixupdlimit;
 	limiter::Bucket chatlimit;
 	uv_timer_t idletimeout_hdl;
@@ -175,6 +177,7 @@ public:
 
 	void get_chunk(const int32_t x, const int32_t y) const;
 	void put_px(const int32_t x, const int32_t y, const RGB);
+	void del_chunk(const int32_t x, const int32_t y, const RGB);
 
 	void teleport(const int32_t x, const int32_t y);
 	void move(const pinfo_t&);
@@ -248,7 +251,7 @@ public:
 
 	Chunk * get_chunk(const int32_t x, const int32_t y, bool create = true);
 	void send_chunk(uWS::WebSocket<uWS::SERVER>, const int32_t x, const int32_t y, bool compressed = false);
-	void del_chunk(const int32_t x, const int32_t y);
+	void del_chunk(const int32_t x, const int32_t y, const RGB);
 	void paste_chunk(const int32_t x, const int32_t y, char const * const);
 	bool put_px(const int32_t x, const int32_t y, const RGB, uint8_t placerRank);
 
@@ -314,6 +317,11 @@ public:
 	static void tell(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 	static void mute(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 	static void worlds(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
+	
+	static void broadcast(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
+	static void totalonline(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
+	static void tellraw(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
+	static void sayraw(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 };
 
 class Server {
@@ -328,7 +336,7 @@ public:
 	std::unordered_set<uWS::WebSocket<uWS::SERVER>> connsws;
 	std::unordered_set<std::string> ipwhitelist;
 	std::unordered_set<std::string> ipblacklist;
-	std::unordered_set<std::string> ipban;
+	std::unordered_map<std::string, int64_t> ipban;
 	std::unordered_map<std::string, uint8_t> conns;
 	limiter::Bucket connlimiter;
 	uWS::Hub h;
@@ -361,14 +369,15 @@ public:
 	bool is_modpw(const std::string&);
 	uint32_t get_conns(const std::string&);
 	
-	void admintell(const std::string&);
+	void admintell(const std::string&, bool modsToo = false);
 	
 	void kickall(World * const);
 	void kickall();
 	void kickip(const std::string&);
 	
-	void banip(const std::string&);
-	std::unordered_set<std::string> * getbans();
+	void clearexpbans();
+	void banip(const std::string&, int64_t);
+	std::unordered_map<std::string, int64_t> * getbans();
 	std::unordered_set<std::string> * getwhitelist();
 	std::unordered_set<std::string> * getblacklist();
 	void whitelistip(const std::string&);

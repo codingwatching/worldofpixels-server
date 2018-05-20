@@ -6,6 +6,7 @@
 
 Client::Client(const uint32_t id, uWS::WebSocket<uWS::SERVER> ws, World * const wrld, SocketInfo * si)
 		: nick(),
+		  dellimit(1, 2),
 		  pixupdlimit(0, 1),
 		  chatlimit(CLIENT_CHAT_RATELIMIT),
 		  ws(ws),
@@ -58,6 +59,12 @@ void Client::put_px(const int32_t x, const int32_t y, const RGB clr) {
 		updated();
 	} else {
 		warn();
+	}
+}
+
+void Client::del_chunk(const int32_t x, const int32_t y, const RGB clr) {
+	if ((is_mod() && dellimit.can_spend()) || is_admin()) {
+		wrld->del_chunk(x, y, clr);
 	}
 }
 

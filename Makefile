@@ -8,7 +8,7 @@ OBJS = commands.cpp color.cpp server.cpp database.cpp client.cpp world.cpp limit
 OUT = out
 
 all:
-	g++ -std=gnu++0x -Wall -O2 $(INCLUDE) $(UWS) $(OBJS) $(LIBS) -o $(OUT)
+	g++ -std=c++11 -Wall -O2 $(INCLUDE) $(UWS) $(OBJS) $(LIBS) -o $(OUT)
 
 debug:
-	g++ -std=gnu++0x -Wall -Og -g $(INCLUDE) $(UWS) $(OBJS) $(LIBS) -o $(OUT)
+	g++ -std=c++11 -Wall -Og -g $(INCLUDE) $(UWS) $(OBJS) $(LIBS) -o $(OUT)

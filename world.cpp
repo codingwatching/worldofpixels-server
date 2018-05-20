@@ -131,9 +131,10 @@ void Chunk::save() {
 	}
 }
 
-void Chunk::clear(){
+void Chunk::clear(const RGB clr) {
+	uint32_t rgb = clr.b << 16 | clr.g << 8 | clr.r;
 	for (size_t i = 0; i < sizeof(data); i++) {
-		data[i] = (uint8_t) (bgclr >> ((i % 3) * 8));
+		data[i] = (uint8_t) (rgb >> ((i % 3) * 8));
 	}
 	changed = true;
 }
@@ -355,10 +356,10 @@ void World::send_chunk(uWS::WebSocket<uWS::SERVER> ws, const int32_t x, const in
 	if(c){ c->send_data(ws, compressed); }
 }
 
-void World::del_chunk(const int32_t x, const int32_t y){
+void World::del_chunk(const int32_t x, const int32_t y, const RGB clr){
 	Chunk * const c = get_chunk(x, y);
 	if(c){
-		c->clear();
+		c->clear(clr);
 		uWS::WebSocket<uWS::SERVER>::PreparedMessage * prep = c->get_prepd_data_msg();
 		for(auto client : clients){
 			client->get_ws().sendPrepared(prep);

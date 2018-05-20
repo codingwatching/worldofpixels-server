@@ -1,11 +1,11 @@
 #include "server.hpp"
 #include <signal.h>
+#include "PropertyReader.hpp"
 
 /* Just for the signal handler */
 static Server * srvptr;
 
 std::string gen_random_str(const size_t size) {
-	srand(time(NULL));
 	static const char alphanum[] =
 		"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz?_";
 
@@ -23,10 +23,20 @@ void handler(int s) {
 
 int main(int argc, char * argv[]) {
 	std::cout << "Starting server..." << std::endl;
-	srvptr = new Server(argc > 1 ? std::stoul(argv[1]) : 443,
-						argc > 2 ? argv[2] : gen_random_str(10),
-						argc > 3 ? argv[3] : gen_random_str(10),
-						argc > 4 ? argv[4] : "chunkdata");
+	srand(time(NULL));
+	
+	PropertyReader pr("props.txt");
+	if (!pr.hasProp("modpass")) {
+		pr.setProp("modpass", gen_random_str(10));
+	}
+	if (!pr.hasProp("adminpass")) {
+		pr.setProp("adminpass", gen_random_str(10));
+	}
+	pr.writeToDisk();
+	srvptr = new Server(std::stoul(pr.getProp("port", "13374")),
+						pr.getProp("modpass"),
+						pr.getProp("adminpass"),
+						pr.getProp("worldfolder", "chunkdata"));
 	
 	struct sigaction sigIntHandler;
 	sigIntHandler.sa_handler = handler;

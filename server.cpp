@@ -28,6 +28,13 @@ size_t getUTF8strlen(const std::string& str) {
 	return (j);
 }
 
+int64_t js_date_now() {
+	struct timeval tp;
+	gettimeofday(&tp, NULL);
+	long int ms = tp.tv_sec * 1000 + tp.tv_usec / 1000;
+	return ms;
+}
+
 Server::Server(const uint16_t port, const std::string& modpw, const std::string& adminpw, const std::string& path)
 	: port(port),
 	  modpw(modpw), 
@@ -61,8 +68,21 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 		si->player = nullptr;
 		connsws.emplace(ws);
 		ws.setUserData(si);
+		int64_t now = js_date_now();
 		bool whitelisted = ipwhitelist.find(si->ip) != ipwhitelist.end();
-		bool banned = ipban.find(si->ip) != ipban.end();
+		bool banned = false;
+		{
+			auto srch = ipban.find(si->ip);
+			if (srch != ipban.end()) {
+				banned = (now < srch->second || srch->second < 0);
+				if (!banned) {
+					clearexpbans();
+				} else {
+					std::string ms("Remaining time: " + std::to_string((srch->second - now) / 1000) + " seconds")
+					ws.send(ms.c_str(), ms.size(), uWS::TEXT);
+				}
+			}
+		}
 		bool isskidbot = instaban && si->origin == "(None)";
 		bool blacklisted = ipblacklist.find(si->ip) != ipwhitelist.end();
 		si->captcha_verified = {captcha_required && !(whitelisted && trusting_captcha) ? CA_WAITING : CA_OK};
@@ -71,17 +91,17 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 				std::string m("Sorry, the server is not accepting new connections right now.");
 				ws.send(m.c_str(), m.size(), uWS::TEXT);
 			} else {
-				std::string m("You are banned. Appeal on the OWOP discord server, (https://discord.gg/fKe7gYT)");
+				std::string m("You are banned. Appeal on the OWOP discord server, (https://discord.io/owop)");
 				ws.send(m.c_str(), m.size(), uWS::TEXT);
 			}
 			ws.close();
 			return;
 		}
 		if (isskidbot && !banned) {
-			ipban.emplace(si->ip);
-			admintell("DEVBanned IP: " + si->ip);
+			ipban.emplace(si->ip, now + 120 * 1000);
+			admintell("DEVBanned IP (skid detected): " + si->ip);
 			banned = true;
-			ws.close();
+			ws.close("get rekt");
 			return;
 		}
 		auto search = conns.find(si->ip);
@@ -100,8 +120,8 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 					si->captcha_verified = CA_WAITING;
 					break;
 				case 2:
-					ipban.emplace(si->ip);
-					admintell("DEVBanned IP: " + si->ip);
+					ipban.emplace(si->ip, -1);
+					admintell("DEVBanned IP (by fc): " + si->ip, true);
 				case 1:
 					ws.close();
 					break;
@@ -156,7 +176,7 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 						if (code < 0 && code != -3) {
 							std::string e("Proxy check API returned an error: " + std::to_string(code) + ", for IP: " + ipcopy);
 							puts(e.c_str());
-							sv->admintell("DEV" + e);
+							sv->admintell("DEV" + e, true);
 							if (code == -5 || code == -6) {
 								sv->set_proxycheck(false);
 							}
@@ -207,7 +227,7 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 						const char * cerr = curl_easy_strerror(cc);
 						std::cout << "Error occurred when verifying captcha: " << cerr << ", " << buf << std::endl;
 						tskbuf->queueTask([cerr, sv] {
-							sv->admintell("Captcha system failed: " + std::string(cerr));
+							sv->admintell("Captcha system failed: " + std::string(cerr), true);
 							sv->set_captcha_protection(false);
 						});
 						return;
@@ -233,7 +253,7 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 							uint8_t captcha_request[2] = {CAPTCHA_REQUIRED, si->captcha_verified};
 							wsc.send((const char *)&captcha_request[0], sizeof(captcha_request), uWS::BINARY);
 							if (si->captcha_verified == CA_INVALID) {
-								sv->admintell("DEVFailed captcha verification for IP: " + si->ip);
+								sv->admintell("DEVFailed captcha verification for IP: " + si->ip, true);
 								wsc.close();
 							} else {
 								std::cout << "Captcha verified for IP: " << si->ip << std::endl;
@@ -257,16 +277,6 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 				case 8: {
 					chunkpos_t pos = *((chunkpos_t *)msg);
 					player->get_chunk(pos.x, pos.y);
-				} break;
-
-				case 9: {
-					if(!player->is_admin()){
-						/* No hacks for you */
-						player->safedelete(true);
-						break;
-					}
-					chunkpos_t pos = *((chunkpos_t *)msg);
-					player->get_world()->del_chunk(pos.x, pos.y);
 				} break;
 				
 				case 10: {
@@ -294,6 +304,16 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 					}
 				} break;
 				
+				case 13: {
+					if(!(player->is_admin() || player->is_mod())){
+						/* No hacks for you */
+						player->safedelete(true);
+						break;
+					}
+					chunkpos_t pos = *((pixupd_t *)msg);
+					player->del_chunk(pos.x, pos.y, {pos.r, pos.g, pos.b});
+				} break;
+				
 				case 776: {
 					if(!player->is_admin()){
 						player->safedelete(true);
@@ -316,7 +336,7 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 				player->warn();
 			}
 		} else if(!player && si->captcha_verified == CA_OK && oc == uWS::BINARY && len > 2 && len - 2 <= 24
-			  && *((uint16_t *)(msg + len - 2)) == 1234){
+			  && *((uint16_t *)(msg + len - 2)) == 4321){
 			join_world(ws, std::string(msg, len - 2));
 		} else if(!player){
 			ws.close();
@@ -443,10 +463,10 @@ uint32_t Server::get_conns(const std::string& ip) {
 	return 0;
 }
 
-void Server::admintell(const std::string & msg) {
+void Server::admintell(const std::string & msg, bool modsToo) {
 	for (auto client : connsws) {
 		SocketInfo const * const si = (SocketInfo *)client.getUserData();
-		if (si->player && si->player->is_admin()) {
+		if (si->player && (si->player->is_admin() || (modsToo && si->player->is_mod()))) {
 			si->player->tell(msg);
 		}
 	}
@@ -485,14 +505,25 @@ void Server::kickip(const std::string & ip) {
 		}
 	}
 	if (!useless) {
-		admintell("DEVKicked IP: " + ip);
+		admintell("DEVKicked IP: " + ip, true);
 		conns.erase(ip);
 	}
 }
 
-void Server::banip(const std::string & ip) {
-	if (ipban.emplace(ip).second) {
-		admintell("DEVBanned IP: " + ip);
+void Server::clearexpbans() {
+	int64_t now = js_date_now();
+	for (auto it = ipban.begin(); it != ipban.end();) {
+		auto ban = *it++;
+		if (now >= ban.second) {
+			admintell("DEVBan expired for: " + ban.first, true);
+			ipban.erase(ban->first);
+		}
+	}
+}
+
+void Server::banip(const std::string & ip, int64_t until) {
+	if (ipban.emplace(ip, until).second) {
+		admintell("DEVBanned IP: " + ip + ", until T" + std::to_string(until), true);
 		auto search = conns.find(ip);
 		if (search != conns.end()) {
 			kickip(ip);
@@ -500,7 +531,7 @@ void Server::banip(const std::string & ip) {
 	}
 }
 
-std::unordered_set<std::string> * Server::getbans() {
+std::unordered_map<std::string, int64_t> * Server::getbans() {
 	return &ipban;
 }
 
@@ -546,9 +577,9 @@ void Server::set_max_ip_conns(uint8_t max) {
 void Server::set_captcha_protection(bool state) {
 	captcha_required = state;
 	if (captcha_required) {
-		admintell("DEVCaptcha protection enabled.");
+		admintell("DEVCaptcha protection enabled.", true);
 	} else {
-		admintell("DEVCaptcha protection disabled.");
+		admintell("DEVCaptcha protection disabled.", true);
 	}
 }
 
@@ -571,10 +602,10 @@ void Server::set_lockdown(bool state) {
 				ipwhitelist.emplace(si->ip);
 			}
 		}
-		admintell("DEVLockdown mode enabled.");
+		admintell("DEVLockdown mode enabled.", true);
 	} else {
 		//ipwhitelist.clear();
-		admintell("DEVLockdown mode disabled.");
+		admintell("DEVLockdown mode disabled.", true);
 	}
 }
 
@@ -593,9 +624,9 @@ void Server::set_instaban(bool state) {
 				}
 			}
 		}
-		admintell("DEVSuspicious banning enabled.");
+		admintell("DEVSuspicious banning enabled.", true);
 	} else {
-		admintell("DEVSuspicious banning disabled.");
+		admintell("DEVSuspicious banning disabled.", true);
 	}
 }
 
@@ -609,9 +640,9 @@ void Server::set_proxycheck(bool state) {
 			kickip(ip);
 		}
 		proxyquery_checking.clear();
-		admintell("DEVProxy check disabled.");
+		admintell("DEVProxy check disabled.", true);
 	} else {
-		admintell("DEVProxy check enabled.");
+		admintell("DEVProxy check enabled.", true);
 	}
 }
 
@@ -621,8 +652,8 @@ bool Server::is_connected(const uWS::WebSocket<uWS::SERVER> ws) {
 
 void Server::writefiles() {
 	std::ofstream file("bans.txt", std::ios_base::trunc);
-	for (auto & ip : ipban) {
-		file << ip << std::endl;
+	for (auto ip : ipban) {
+		file << ip->first << " " << ip->second << std::endl;
 	}
 	file.flush();
 	file.close();
@@ -646,7 +677,15 @@ void Server::readfiles() {
 	while (file.good()) {
 		std::getline(file, ip);
 		if (ip.size() > 0) {
-			ipban.emplace(ip);
+			size_t keylen = ip.find_first_of(' ');
+			if (keylen != std::string::npos) {
+				try {
+					ipban[ip.substr(0, keylen)] = std::stol(ip.substr(keylen + 1));
+				} catch (std::invalid_argument & e) { }
+				  catch (std::out_of_range & e) { }
+			} else {
+				ipban[ip] = -1;
+			}
 		}
 		ip.clear();
 	}
