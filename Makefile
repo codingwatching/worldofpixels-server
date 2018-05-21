@@ -3,7 +3,7 @@ UWS = uWebSockets/src/Extensions.cpp uWebSockets/src/Group.cpp uWebSockets/src/W
 INCLUDE = -I uWebSockets/src/
 LIBS = -luv -lcrypto -lssl -lz -lpthread -lcurl -DUSE_LIBUV
 
-OBJS = commands.cpp color.cpp server.cpp database.cpp client.cpp world.cpp limiter.cpp main.cpp AsyncHTTPGETClient.cpp TaskBuffer.cpp
+OBJS = commands.cpp color.cpp server.cpp database.cpp client.cpp world.cpp limiter.cpp main.cpp AsyncHTTPGETClient.cpp TaskBuffer.cpp PropertyReader.cpp
 
 OUT = out
 

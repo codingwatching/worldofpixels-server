@@ -12,7 +12,7 @@ public:
 	~PropertyReader();
 	
 	bool readFromDisk();
-	bool writeToDisk(bool force);
+	bool writeToDisk(bool force = false);
 
 	bool hasProp(const std::string key);
 	std::string getProp(const std::string key, const std::string defval = "");

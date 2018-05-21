@@ -195,6 +195,7 @@ void Commands::kickip(Server * const sv, const Commands * const cmd,
 
 void Commands::banip(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
+	sv->clearexpbans();
 	if (args.size() == 3) {
 		int64_t t = -1;
 		try {
@@ -205,6 +206,8 @@ void Commands::banip(Server * const sv, const Commands * const cmd,
 			return;
 		}
 		if (t >= 0) {
+			t *= 1000;
+			t *= 60;
 			t += js_date_now();
 		}
 		sv->banip(args[1], t);
@@ -575,30 +578,33 @@ void Commands::tell(Server * const sv, const Commands * const cmd,
 
 void Commands::bans(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
+	sv->clearexpbans();
 	auto * banarr = sv->getbans();
 	if (args.size() == 2) {
 		int64_t now = js_date_now();
 		if (args[1] == "list") {
 			for (auto & ip : *banarr) {
-				std::string zz(ip.second < 0 ? "Inf" : std::to_string((ip.second - now) / 1000) + " secs");
-				cl->tell("-> " + ip.first + " (" + zz + ")");
+				cl->tell("-> " + ip.first + "(" + std::to_string(ip.second < 0 ? -1 : (ip.second - now) / 1000) + ")");
 			}
 			cl->tell("Total: " + std::to_string(banarr->size()));
 		} else if (args[1] == "clear") {
 			banarr->clear();
 			cl->tell("Cleared all bans.");
 		}
-	} else if (args.size() == 3) {
+	} else if (args.size() >= 3) {
 		if (args[1] == "add") {
-			banarr->emplace(args[2]);
-			cl->tell("Banned IP: " + args[2]);
+			try {
+				banarr->emplace(args[2], std::stol(args[3]));
+				cl->tell("Banned IP: " + args[2]);
+			} catch (std::invalid_argument& e) { }
+			catch(std::out_of_range& e) { }
 		} else if (args[1] == "remove") {
 			if (banarr->erase(args[2])) {
 				cl->tell("Unbanned IP: " + args[2]);
 			}
 		}
 	} else {
-		cl->tell("Usage: /bans (list, clear, add, remove) [IP]");
+		cl->tell("Usage: /bans (list, clear, add, remove) [IP] [UNIX_TIME]");
 	}
 }
 

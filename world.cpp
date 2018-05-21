@@ -178,9 +178,9 @@ void World::reload() {
 		paintrate = r;
 		bgclr = stoul(getProp("bgcolor", "FFFFFF"), nullptr, 16);
 		bgclr = (bgclr & 0xFF) << 16 | (bgclr & 0xFF00) | (bgclr & 0xFF0000) >> 16;
-	} catch(std::invalid_argument) {
+	} catch(std::invalid_argument& e) {
 		broadcast("DEVException while reloading world properties. (std::invalid_argument)");
-	} catch(std::out_of_range) {
+	} catch(std::out_of_range& e) {
 		broadcast("DEVException while reloading world properties. (std::out_of_range)");
 	}
 }

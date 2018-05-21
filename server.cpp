@@ -78,7 +78,7 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 				if (!banned) {
 					clearexpbans();
 				} else {
-					std::string ms("Remaining time: " + std::to_string((srch->second - now) / 1000) + " seconds")
+					std::string ms("Remaining time: " + std::to_string((srch->second - now) / 1000) + " seconds");
 					ws.send(ms.c_str(), ms.size(), uWS::TEXT);
 				}
 			}
@@ -101,7 +101,7 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 			ipban.emplace(si->ip, now + 120 * 1000);
 			admintell("DEVBanned IP (skid detected): " + si->ip);
 			banned = true;
-			ws.close("get rekt");
+			ws.close();
 			return;
 		}
 		auto search = conns.find(si->ip);
@@ -184,7 +184,7 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 						}
 						switch (code) {
 							case 1:
-								sv->banip(ipcopy);
+								sv->banip(ipcopy, -1);
 								break;
 							case 0:
 							case -3: /* Unroutable address / private address */
@@ -310,7 +310,7 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 						player->safedelete(true);
 						break;
 					}
-					chunkpos_t pos = *((pixupd_t *)msg);
+					pixupd_t pos = *((pixupd_t *)msg);
 					player->del_chunk(pos.x, pos.y, {pos.r, pos.g, pos.b});
 				} break;
 				
@@ -516,7 +516,7 @@ void Server::clearexpbans() {
 		auto ban = *it++;
 		if (now >= ban.second) {
 			admintell("DEVBan expired for: " + ban.first, true);
-			ipban.erase(ban->first);
+			ipban.erase(ban.first);
 		}
 	}
 }
@@ -652,8 +652,8 @@ bool Server::is_connected(const uWS::WebSocket<uWS::SERVER> ws) {
 
 void Server::writefiles() {
 	std::ofstream file("bans.txt", std::ios_base::trunc);
-	for (auto ip : ipban) {
-		file << ip->first << " " << ip->second << std::endl;
+	for (auto & ip : ipban) {
+		file << ip.first << " " << ip.second << std::endl;
 	}
 	file.flush();
 	file.close();
@@ -673,6 +673,8 @@ void Server::writefiles() {
 
 void Server::readfiles() {
 	std::string ip;
+	
+	
 	std::ifstream file("bans.txt");
 	while (file.good()) {
 		std::getline(file, ip);

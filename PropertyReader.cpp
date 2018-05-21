@@ -9,6 +9,12 @@ PropertyReader::PropertyReader(const std::string path)
 	readFromDisk();
 }
 
+PropertyReader::~PropertyReader() {
+	if (propsChanged) {
+		writeToDisk();
+	}
+}
+
 /* Returns false if it couldn't open the file */
 bool PropertyReader::readFromDisk() {
 	std::string prop;
@@ -46,6 +52,10 @@ bool PropertyReader::writeToDisk(bool force) {
 	}
 	
 	return ok;
+}
+
+bool PropertyReader::hasProp(std::string key) {
+	return props.find(key) != props.end();
 }
 
 std::string PropertyReader::getProp(std::string key, std::string defval) {
