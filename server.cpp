@@ -77,7 +77,7 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 				banned = (now < srch->second || srch->second < 0);
 				if (!banned) {
 					clearexpbans();
-				} else {
+				} else if (srch->second > 0) {
 					std::string ms("Remaining time: " + std::to_string((srch->second - now) / 1000) + " seconds");
 					ws.send(ms.c_str(), ms.size(), uWS::TEXT);
 				}
@@ -202,6 +202,7 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 		SocketInfo * const si = ((SocketInfo *)ws.getUserData());
 		Client * const player = si->player;
 		if (si->captcha_verified == CA_WAITING && oc == uWS::TEXT && len > 7 && std::string(msg, 7) == "CaptchA" && len < 2048) {
+			std::string org_capt(msg + 7, len - 7);
 			char * esc_recaptcha_resp = curl_easy_escape(hcli.getCurl(), msg + 7, len - 7);
 			if (!esc_recaptcha_resp) {
 				ws.close();
@@ -290,7 +291,7 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 				} break;
 				
 				case 11: {
-					pixupd_t pos = *((pixupd_t *)msg);
+					pixpkt_t pos = *((pixpkt_t *)msg);
 					player->put_px(pos.x, pos.y, {pos.r, pos.g, pos.b});
 				} break;
 				
@@ -310,7 +311,7 @@ Server::Server(const uint16_t port, const std::string& modpw, const std::string&
 						player->safedelete(true);
 						break;
 					}
-					pixupd_t pos = *((pixupd_t *)msg);
+					pixpkt_t pos = *((pixpkt_t *)msg);
 					player->del_chunk(pos.x, pos.y, {pos.r, pos.g, pos.b});
 				} break;
 				
@@ -514,7 +515,7 @@ void Server::clearexpbans() {
 	int64_t now = js_date_now();
 	for (auto it = ipban.begin(); it != ipban.end();) {
 		auto ban = *it++;
-		if (now >= ban.second) {
+		if (now >= ban.second && ban.second > 0) {
 			admintell("DEVBan expired for: " + ban.first, true);
 			ipban.erase(ban.first);
 		}

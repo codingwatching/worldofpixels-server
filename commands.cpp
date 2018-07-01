@@ -159,6 +159,10 @@ void Commands::modlogin(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if(!cl->is_mod() && args.size() == 2){
 		if(sv->is_modpw(args[1])) {
+			if (!cl->get_world()->mods_enabled()) {
+				cl->tell("Sorry, but moderators are disabled on this world.");
+				return;
+			}
 			std::string msg("DEV" + std::to_string(cl->id) + " (" + cl->get_world()->name + ", " + cl->si->ip + ") Got mod");
 			std::cout << msg << std::endl;
 			sv->admintell(msg);
@@ -594,10 +598,10 @@ void Commands::bans(Server * const sv, const Commands * const cmd,
 	} else if (args.size() >= 3) {
 		if (args[1] == "add") {
 			try {
-				banarr->emplace(args[2], std::stol(args[3]));
-				cl->tell("Banned IP: " + args[2]);
-			} catch (std::invalid_argument& e) { }
-			catch(std::out_of_range& e) { }
+				std::string time(args.size() == 3 ? "-1" : args[3]);
+				sv->banip(args[2], std::stol(time));
+			} catch (std::invalid_argument& e) { cl->tell("Invalid number!"); }
+			catch(std::out_of_range& e) { cl->tell("Number out of range"); }
 		} else if (args[1] == "remove") {
 			if (banarr->erase(args[2])) {
 				cl->tell("Unbanned IP: " + args[2]);

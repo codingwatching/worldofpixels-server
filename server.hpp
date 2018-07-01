@@ -51,7 +51,16 @@ struct pinfo_t {
 	uint8_t tool;
 };
 
+struct pixpkt_t {
+	int32_t x;
+	int32_t y;
+	uint8_t r;
+	uint8_t g;
+	uint8_t b;
+} __attribute__((packed));
+
 struct pixupd_t {
+	uint32_t id;
 	int32_t x;
 	int32_t y;
 	uint8_t r;
@@ -253,7 +262,7 @@ public:
 	void send_chunk(uWS::WebSocket<uWS::SERVER>, const int32_t x, const int32_t y, bool compressed = false);
 	void del_chunk(const int32_t x, const int32_t y, const RGB);
 	void paste_chunk(const int32_t x, const int32_t y, char const * const);
-	bool put_px(const int32_t x, const int32_t y, const RGB, uint8_t placerRank);
+	bool put_px(const int32_t x, const int32_t y, const RGB, uint8_t placerRank, uint32_t id);
 
 	void safedelete();
 
@@ -262,6 +271,7 @@ public:
 	void save();
 
 	bool is_empty() const;
+	bool mods_enabled();
 	bool is_pass(std::string const&) const;
 	void set_default_rank(uint8_t);
 	uint8_t get_default_rank();

@@ -6,7 +6,7 @@
 
 Client::Client(const uint32_t id, uWS::WebSocket<uWS::SERVER> ws, World * const wrld, SocketInfo * si)
 		: nick(),
-		  dellimit(1, 2),
+		  dellimit(1, 1),
 		  pixupdlimit(0, 1),
 		  chatlimit(CLIENT_CHAT_RATELIMIT),
 		  ws(ws),
@@ -55,7 +55,7 @@ void Client::put_px(const int32_t x, const int32_t y, const RGB clr) {
 			}
 		}
 		lastclr = clr;
-		wrld->put_px(x, y, clr, rank);
+		wrld->put_px(x, y, clr, rank, id);
 		updated();
 	} else {
 		warn();
@@ -95,6 +95,8 @@ bool Client::can_chat() {
 void Client::chat(const std::string& msg) {
 	if (!mute) {
 		wrld->broadcast(get_nick() + ": " + msg);
+	} else {
+		tell(get_nick() + ": " + msg);
 	}
 }
 

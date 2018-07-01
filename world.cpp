@@ -381,10 +381,10 @@ void World::paste_chunk(const int32_t x, const int32_t y, char const * const dat
 	}
 }
 
-bool World::put_px(const int32_t x, const int32_t y, const RGB clr, uint8_t placerRank) {
+bool World::put_px(const int32_t x, const int32_t y, const RGB clr, uint8_t placerRank, uint32_t id) {
 	Chunk * const chunk = get_chunk(x >> 4, y >> 4);
 	if(chunk && (!chunk->ranked || placerRank > 1) && chunk->set_data(x & 0xF, y & 0xF, clr)){
-		pxupdates.push_back({x, y, clr.r, clr.g, clr.b});
+		pxupdates.push_back({id, x, y, clr.r, clr.g, clr.b});
 		sched_updates();
 		return true;
 	}
@@ -438,6 +438,10 @@ bool World::is_empty() const {
 
 bool World::is_pass(std::string const& p) const {
 	return p == pass;
+}
+
+bool World::mods_enabled() {
+	return getProp("disablemods", "false") != "true";
 }
 
 uint8_t World::get_default_rank() {
