@@ -1,7 +1,13 @@
-#include "server.hpp"
-#include <vector>
+#include "Commands.hpp"
+
+#include <Server.hpp>
+#include <Client.hpp>
+#include <World.hpp>
+
+#include <misc/utils.hpp>
+
 #include <algorithm>
-#include <functional>
+#include <iostream>
 
 Commands::Commands(Server * const sv) {
 	usrcmds = {
@@ -12,7 +18,7 @@ Commands::Commands(Server * const sv) {
 		{"modlogin", std::bind(Commands::modlogin, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"adminlogin", std::bind(Commands::adminlogin, sv, this, std::placeholders::_1, std::placeholders::_2)}
 	};
-	
+
 	modcmds = {
 		{"tp", std::bind(Commands::teleport, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"kickip", std::bind(Commands::kickip, sv, this, std::placeholders::_1, std::placeholders::_2)},
@@ -49,7 +55,7 @@ Commands::Commands(Server * const sv) {
 	};
 }
 
-std::string Commands::get_cmd_list(uint8_t rank) const {
+std::string Commands::get_cmd_list(u8 rank) const {
 	std::string m("");
 	switch(rank) {
 		case Client::ADMIN:
@@ -79,8 +85,8 @@ std::string Commands::get_cmd_list(uint8_t rank) const {
 
 std::vector<std::string> Commands::split_args(const std::string& msg) {
 	std::vector<std::string> args;
-	size_t i = 0;
-	size_t j = 0;
+	sz_t i = 0;
+	sz_t j = 0;
 	const char * msgp = msg.c_str();
 	do {
 		if(msgp[i] == ' '){
@@ -128,7 +134,7 @@ bool Commands::exec(Client * const cl, const std::string& msg) const {
 					}
 				}
 				return false;
-				
+
 		}
 		search->second(cl, args);
 		return true;
@@ -140,14 +146,14 @@ void Commands::pass(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() > 1) {
 		std::string value = std::string(args[1]);
-		for (size_t i = 2; i < args.size(); i++) {
+		for (sz_t i = 2; i < args.size(); i++) {
 			value.append(" " + args[i]);
 		}
 		World * const w = cl->get_world();
 		if (w->is_pass(value)) {
 			cl->promote(w->get_default_rank(), w->get_paintrate());
 		} else {
-			cl->safedelete(true);
+			cl->disconnect();
 		}
 	} else {
 		cl->tell("Use to unlock drawing on a protected world.");
@@ -169,7 +175,7 @@ void Commands::modlogin(Server * const sv, const Commands * const cmd,
 			cl->promote(Client::MODERATOR, cl->get_world()->get_paintrate());
 		} else {
 			/* One try */
-			cl->safedelete(true);
+			cl->disconnect();
 		}
 	}
 }
@@ -183,7 +189,7 @@ void Commands::adminlogin(Server * const sv, const Commands * const cmd,
 			cl->promote(Client::ADMIN, cl->get_world()->get_paintrate());
 		} else {
 			/* One try */
-			cl->safedelete(true);
+			cl->disconnect();
 		}
 	}
 }
@@ -201,7 +207,7 @@ void Commands::banip(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	sv->clearexpbans();
 	if (args.size() == 3) {
-		int64_t t = -1;
+		i64 t = -1;
 		try {
 			t = stol(args[2]);
 		} catch(std::invalid_argument& e) {
@@ -232,7 +238,7 @@ void Commands::setprop(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() > 2) {
 		std::string value = std::string(args[2]);
-		for (size_t i = 3; i < args.size(); i++) {
+		for (sz_t i = 3; i < args.size(); i++) {
 			value.append(" " + args[i]);
 		}
 		cl->get_world()->setProp(args[1], value);
@@ -261,7 +267,7 @@ void Commands::getid(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() > 1) {
 		std::string name = std::string(args[1]);
-		for (size_t i = 2; i < args.size(); i++) {
+		for (sz_t i = 2; i < args.size(); i++) {
 			name.append(" " + args[i]);
 		}
 		Client * const c = cl->get_world()->get_cli(name);
@@ -279,8 +285,8 @@ void Commands::getid(Server * const sv, const Commands * const cmd,
 void Commands::teleport(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if(args.size() == 3){
-		int32_t x = 0;
-		int32_t y = 0;
+		i32 x = 0;
+		i32 y = 0;
 		try {
 			x = stoi(args[1]);
 			y = stoi(args[2]);
@@ -292,7 +298,7 @@ void Commands::teleport(Server * const sv, const Commands * const cmd,
 		cl->tell("Server: Teleported to X: " + std::to_string(x) + ", Y: " + std::to_string(y));
 		cl->teleport(x, y);
 	} else if (args.size() == 2) {
-		uint32_t id = 0;
+		u32 id = 0;
 		try {
 			id = stoul(args[1]);
 		} catch(std::invalid_argument& e) {
@@ -306,9 +312,9 @@ void Commands::teleport(Server * const sv, const Commands * const cmd,
 			cl->teleport(pos->x >> 4, pos->y >> 4);
 		}
 	} else if (args.size() == 4) {
-		uint32_t id = 0;
-		int32_t x = 0;
-		int32_t y = 0;
+		u32 id = 0;
+		i32 x = 0;
+		i32 y = 0;
 		try {
 			id = stoul(args[1]);
 			x = stoi(args[2]);
@@ -321,8 +327,8 @@ void Commands::teleport(Server * const sv, const Commands * const cmd,
 		Client * const target = cl->get_world()->get_cli(id);
 		if (target) {
 			pinfo_t const * const p = target->get_pos();
-			int32_t lx = p->x >> 4;
-			int32_t ly = p->y >> 4;
+			i32 lx = p->x >> 4;
+			i32 ly = p->y >> 4;
 			target->teleport(x, y);
 			cl->tell("Server: Teleported " + std::to_string(id) + " from " + std::to_string(lx) + ", " + std::to_string(ly) + " to " + std::to_string(x) + ", " + std::to_string(y));
 		}
@@ -334,7 +340,7 @@ void Commands::teleport(Server * const sv, const Commands * const cmd,
 void Commands::restrict(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() == 2) {
-		uint8_t newstate = args[1] == "true" ? Client::NONE : Client::USER;
+		u8 newstate = args[1] == "true" ? Client::NONE : Client::USER;
 		cl->get_world()->set_default_rank(newstate);
 		std::string msg("Draw restriction is " + (newstate == Client::NONE ? std::string("ON") : std::string("OFF")));
 		cl->tell(msg);
@@ -347,8 +353,8 @@ void Commands::restrict(Server * const sv, const Commands * const cmd,
 void Commands::setrank(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if(args.size() == 3){
-		uint32_t id = 0;
-		uint32_t rank = 0;
+		u32 id = 0;
+		u32 rank = 0;
 		try {
 			id = stoul(args[1]);
 			rank = stoul(args[2]);
@@ -376,7 +382,7 @@ void Commands::setrank(Server * const sv, const Commands * const cmd,
 void Commands::kick(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if(args.size() == 2){
-		uint32_t id = 0;
+		u32 id = 0;
 		try {
 			id = stoul(args[1]);
 		} catch(std::invalid_argument& e) {
@@ -387,7 +393,7 @@ void Commands::kick(Server * const sv, const Commands * const cmd,
 		Client * const target = cl->get_world()->get_cli(id);
 		if(target && target->get_rank() < cl->get_rank()) {
 			target->teleport(0, 0);
-			target->safedelete(true);
+			target->disconnect();
 			cl->tell("Kicked user (" + std::to_string(id) + ")");
 		} else if (target && target->get_rank() >= cl->get_rank()) {
 			cl->tell("Error: Target's rank must be less than yours.");
@@ -428,9 +434,9 @@ void Commands::lock(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if(args.size() == 3){
 		if (args[1] == "ip") {
-			uint32_t ipcnt32 = 0;
-			uint8_t ipcnt = 0;
-			const uint8_t limit = cl->is_admin() ? 255 : 10;
+			u32 ipcnt32 = 0;
+			u8 ipcnt = 0;
+			const u8 limit = cl->is_admin() ? 255 : 10;
 			try {
 				ipcnt32 = stoul(args[2]);
 				ipcnt = ipcnt32 >= limit ? limit : ipcnt32 <= 1 ? 1 : ipcnt32;
@@ -454,7 +460,7 @@ void Commands::lock(Server * const sv, const Commands * const cmd,
 			sv->trusting_captcha = new_state;
 			cl->tell("Trusting whitelist " + (new_state ? std::string("enabled.") : std::string("disabled.")));
 		} else if (args[1] == "fastconnects") {
-			uint8_t new_state = args[2] == "captcha" ? 3 : args[2] == "ban" ? 2 : args[2] == "kick" ? 1 : 0;
+			u8 new_state = args[2] == "captcha" ? 3 : args[2] == "ban" ? 2 : args[2] == "kick" ? 1 : 0;
 			sv->fastconnectaction = new_state;
 			const char * tellmsg[4] = {"allowing", "kicking", "banning", "asking for captcha on"};
 			cl->tell("Now " + std::string(tellmsg[new_state]) + " fast connections.");
@@ -480,7 +486,7 @@ void Commands::lockdown(Server * const sv, const Commands * const cmd,
 void Commands::whois(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if(args.size() == 2){
-		uint32_t id = 0;
+		u32 id = 0;
 		try {
 			id = stoul(args[1]);
 		} catch(std::invalid_argument& e) {
@@ -530,11 +536,11 @@ void Commands::nick(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() >= 2) {
 		std::string name = std::string(args[1]);
-		for (size_t i = 2; i < args.size(); i++) {
+		for (sz_t i = 2; i < args.size(); i++) {
 			name.append(" " + args[i]);
 		}
 		name.erase(std::remove(name.begin(), name.end(), '\n'), name.end());
-		size_t size = getUTF8strlen(name);
+		sz_t size = getUTF8strlen(name);
 		if (name.size() < 1) return;
 		if (cl->is_admin()) {
 			cl->set_nick(name);
@@ -556,7 +562,7 @@ void Commands::nick(Server * const sv, const Commands * const cmd,
 void Commands::tell(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() >= 3) {
-		uint32_t id = 0;
+		u32 id = 0;
 		try {
 			id = stoul(args[1]);
 		} catch(std::invalid_argument& e) {
@@ -565,7 +571,7 @@ void Commands::tell(Server * const sv, const Commands * const cmd,
 			return;
 		}
 		std::string msg = std::string(args[2]);
-		for (size_t i = 3; i < args.size(); i++) {
+		for (sz_t i = 3; i < args.size(); i++) {
 			msg.append(" " + args[i]);
 		}
 		Client * const target = cl->get_world()->get_cli(id);
@@ -585,7 +591,7 @@ void Commands::bans(Server * const sv, const Commands * const cmd,
 	sv->clearexpbans();
 	auto * banarr = sv->getbans();
 	if (args.size() == 2) {
-		int64_t now = js_date_now();
+		i64 now = js_date_now();
 		if (args[1] == "list") {
 			for (auto & ip : *banarr) {
 				cl->tell("-> " + ip.first + "(" + std::to_string(ip.second < 0 ? -1 : (ip.second - now) / 1000) + ")");
@@ -681,7 +687,7 @@ void Commands::blacklist(Server * const sv, const Commands * const cmd,
 void Commands::mute(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() == 3) {
-		uint32_t id = 0;
+		u32 id = 0;
 		try {
 			id = stoul(args[1]);
 		} catch(std::invalid_argument& e) {
@@ -707,7 +713,7 @@ void Commands::mute(Server * const sv, const Commands * const cmd,
 void Commands::doas(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() >= 3) {
-		uint32_t id = 0;
+		u32 id = 0;
 		try {
 			id = stoul(args[1]);
 		} catch(std::invalid_argument& e) {
@@ -716,7 +722,7 @@ void Commands::doas(Server * const sv, const Commands * const cmd,
 			return;
 		}
 		std::string msg = std::string(args[2]);
-		for (size_t i = 3; i < args.size(); i++) {
+		for (sz_t i = 3; i < args.size(); i++) {
 			msg.append(" " + args[i]);
 		}
 		Client * const target = cl->get_world()->get_cli(id);
@@ -733,9 +739,9 @@ void Commands::doas(Server * const sv, const Commands * const cmd,
 void Commands::setpbucket(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() == 4) {
-		uint32_t id = 0;
-		uint32_t rate = 0;
-		uint32_t per = 0;
+		u32 id = 0;
+		u32 rate = 0;
+		u32 per = 0;
 		try {
 			id = stoul(args[1]);
 			rate = stoul(args[2]);
@@ -764,7 +770,7 @@ void Commands::broadcast(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() >= 2) {
 		std::string msg = std::string(args[1]);
-		for (size_t i = 2; i < args.size(); i++) {
+		for (sz_t i = 2; i < args.size(); i++) {
 			msg.append(" " + args[i]);
 		}
 		sv->broadcastmsg(msg);
@@ -781,7 +787,7 @@ void Commands::totalonline(Server * const sv, const Commands * const cmd,
 void Commands::tellraw(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() >= 3) {
-		uint32_t id = 0;
+		u32 id = 0;
 		try {
 			id = stoul(args[1]);
 		} catch(std::invalid_argument& e) {
@@ -790,7 +796,7 @@ void Commands::tellraw(Server * const sv, const Commands * const cmd,
 			return;
 		}
 		std::string msg = std::string(args[2]);
-		for (size_t i = 3; i < args.size(); i++) {
+		for (sz_t i = 3; i < args.size(); i++) {
 			msg.append(" " + args[i]);
 		}
 		Client * const target = cl->get_world()->get_cli(id);
@@ -810,10 +816,10 @@ void Commands::sayraw(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() >= 2) {
 		std::string msg = std::string(args[1]);
-		for (size_t i = 2; i < args.size(); i++) {
+		for (sz_t i = 2; i < args.size(); i++) {
 			msg.append(" " + args[i]);
 		}
-		
+
 		cl->get_world()->broadcast(msg);
 	} else {
 		cl->tell("Send a message as raw text.");

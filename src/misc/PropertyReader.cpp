@@ -1,6 +1,7 @@
 #include "PropertyReader.hpp"
 
 #include <stdexcept>
+#include <cstdint>
 #include <fstream>
 
 PropertyReader::PropertyReader(const std::string path)
@@ -23,7 +24,7 @@ bool PropertyReader::readFromDisk() {
 	while (file.good()) {
 		std::getline(file, prop);
 		if (prop.size() > 0) {
-			size_t keylen = prop.find_first_of(' ');
+			std::size_t keylen = prop.find_first_of(' ');
 			if (keylen != std::string::npos) {
 				props[prop.substr(0, keylen)] = prop.substr(keylen + 1);
 			}
@@ -37,7 +38,7 @@ bool PropertyReader::writeToDisk(bool force) {
 	if (!(propsChanged || force)) {
 		return true;
 	}
-	
+
 	bool ok = true;
 	if (props.size() != 0) {
 		std::ofstream file(filePath, std::ios_base::trunc);
@@ -50,7 +51,7 @@ bool PropertyReader::writeToDisk(bool force) {
 	} else {
 		std::remove(filePath.c_str());
 	}
-	
+
 	return ok;
 }
 

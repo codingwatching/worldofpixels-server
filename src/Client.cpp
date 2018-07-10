@@ -1,14 +1,16 @@
-#include "server.hpp"
+#include "Client.hpp"
+#include "World.hpp"
 
 #include <cmath>
+#include <misc/utils.hpp>
 
 /* Client class functions */
 
-Client::Client(const uint32_t id, uWS::WebSocket<uWS::SERVER> ws, World * const wrld, SocketInfo * si)
+Client::Client(const u32 id, uWS::WebSocket<uWS::SERVER> * ws, World * const wrld, SocketInfo * si)
 		: nick(),
 		  dellimit(1, 1),
 		  pixupdlimit(0, 1),
-		  chatlimit(CLIENT_CHAT_RATELIMIT),
+		  chatlimit(4, 6),
 		  ws(ws),
 		  wrld(wrld),
 		  penalty(0),
@@ -22,16 +24,17 @@ Client::Client(const uint32_t id, uWS::WebSocket<uWS::SERVER> ws, World * const 
 		  id(id),
 		  si(si),
 		  mute(false){
-	std::cout << "(" << wrld->name << "/" << si->ip << ") New client! ID: " << id << std::endl;
-	uv_timer_init(uv_default_loop(), &idletimeout_hdl);
+	//std::cout << "(" << wrld->name << "/" << si->ip << ") New client! ID: " << id << std::endl;
+	/*uv_timer_init(uv_default_loop(), &idletimeout_hdl);
 	idletimeout_hdl.data = this;
-	uv_timer_start(&idletimeout_hdl, (uv_timer_cb) &Client::idle_timeout, 300000, 1200000);
-	uint8_t msg[5] = {SET_ID};
+	uv_timer_start(&idletimeout_hdl, (uv_timer_cb) &Client::idle_timeout, 300000, 1200000);*/
+	u8 msg[5] = {SET_ID};
 	memcpy(&msg[1], (char *)&id, sizeof(id));
-	ws.send((const char *)&msg, sizeof(msg), uWS::BINARY);
+	ws->send((const char *)&msg, sizeof(msg), uWS::BINARY);
 }
 
 Client::~Client() {
+	wrld->rm_cli(this);
 	/* std::cout << "Client deleted! ID: " << id << std::endl; */
 }
 
@@ -39,16 +42,16 @@ bool Client::can_edit() {
 	return pixupdlimit.can_spend();
 }
 
-void Client::get_chunk(const int32_t x, const int32_t y) const {
+void Client::get_chunk(const i32 x, const i32 y) const {
 	wrld->send_chunk(ws, x, y);
 }
 
-void Client::put_px(const int32_t x, const int32_t y, const RGB clr) {
+void Client::put_px(const i32 x, const i32 y, const RGB clr) {
 	if(is_admin() || can_edit()){
-		uint32_t distx = (x >> 4) - (pos.x >> 8); distx *= distx;
-		uint32_t disty = (y >> 4) - (pos.y >> 8); disty *= disty;
-		const uint32_t dist = sqrt(distx + disty);
-		const uint32_t clrdist = ColourDistance(lastclr, clr);
+		u32 distx = (x >> 4) - (pos.x >> 8); distx *= distx;
+		u32 disty = (y >> 4) - (pos.y >> 8); disty *= disty;
+		const u32 dist = sqrt(distx + disty);
+		const u32 clrdist = ColourDistance(lastclr, clr);
 		if(!is_admin() && (dist > 3 || (clrdist != 0 && clrdist < 8))){
 			if(warn() || dist > 3){
 				return;
@@ -62,17 +65,17 @@ void Client::put_px(const int32_t x, const int32_t y, const RGB clr) {
 	}
 }
 
-void Client::del_chunk(const int32_t x, const int32_t y, const RGB clr) {
+void Client::del_chunk(const i32 x, const i32 y, const RGB clr) {
 	if ((is_mod() && dellimit.can_spend()) || is_admin()) {
 		wrld->del_chunk(x, y, clr);
 	}
 }
 
-void Client::teleport(const int32_t x, const int32_t y) {
-	uint8_t msg[9] = {TELEPORT};
+void Client::teleport(const i32 x, const i32 y) {
+	u8 msg[9] = {TELEPORT};
 	memcpy(&msg[1], (char *)&x, sizeof(x));
 	memcpy(&msg[5], (char *)&y, sizeof(y));
-	ws.send((const char *)&msg, sizeof(msg), uWS::BINARY);
+	ws->send((const char *)&msg, sizeof(msg), uWS::BINARY);
 	pos.x = (x << 4) + 8;
 	pos.y = (y << 4) + 8;
 	wrld->upd_cli(this);
@@ -101,40 +104,25 @@ void Client::chat(const std::string& msg) {
 }
 
 void Client::tell(const std::string& msg) {
-	ws.send(msg.c_str(), msg.size(), uWS::TEXT);
+	ws->send(msg.c_str(), msg.size(), uWS::TEXT);
 }
 
 void Client::updated() {
-	uv_timer_again(&idletimeout_hdl);
+	lastMovement = js_date_now();
 }
 
-void Client::idle_timeout(uv_timer_t * const t) {
-	Client * const cl = (Client *)t->data;
-	/* Maybe there should be a proper kick function */
-	cl->tell("Server: Kicked for inactivity.");
-	cl->safedelete(true);
-}
-
-void Client::safedelete(const bool close) {
-	if(handledelete){
-		handledelete = false;
-		wrld->rm_cli(this);
-		uv_timer_stop(&idletimeout_hdl);
-		uv_close((uv_handle_t *)&idletimeout_hdl, (uv_close_cb)([](uv_handle_t * const t){
-			delete (Client *)t->data;
-		}));
-		if(close){
-			ws.close();
-		}
+void Client::disconnect() {
+	if (!ws->isClosed() && !ws->isShuttingDown()) {
+		ws->close();
 	}
 }
 
-void Client::promote(uint8_t newrank, uint16_t prate) {
+void Client::promote(u8 newrank, u16 prate) {
 	if (newrank == rank) {
 		return;
 	}
-	
-	
+
+
 	rank = newrank;
 	if (rank == ADMIN) {
 		tell("Server: You are now an admin. Do /help for a list of commands.");
@@ -146,13 +134,13 @@ void Client::promote(uint8_t newrank, uint16_t prate) {
 	} else {
 		set_pbucket(0, 1);
 	}
-	uint8_t msg[2] = {PERMISSIONS, rank};
-	ws.send((const char *)&msg, sizeof(msg), uWS::BINARY);
+	u8 msg[2] = {PERMISSIONS, rank};
+	ws->send((const char *)&msg, sizeof(msg), uWS::BINARY);
 }
 
 bool Client::warn() {
-	if(!is_admin() && ++penalty > CLIENT_MAX_WARN_LEVEL){
-		safedelete(true);
+	if(!is_admin() && ++penalty > 128){
+		disconnect();
 		return true;
 	}
 	return false;
@@ -166,7 +154,7 @@ bool Client::is_admin() const {
 	return rank == ADMIN;
 }
 
-uWS::WebSocket<uWS::SERVER> Client::get_ws() const {
+uWS::WebSocket<uWS::SERVER> * Client::get_ws() const {
 	return ws;
 }
 
@@ -183,12 +171,16 @@ World * Client::get_world() const {
 	return wrld;
 }
 
-uint16_t Client::get_penalty() const {
+u16 Client::get_penalty() const {
 	return penalty;
 }
 
-uint8_t Client::get_rank() const {
+u8 Client::get_rank() const {
 	return rank;
+}
+
+i64 Client::get_last_move() const {
+	return lastMovement;
 }
 
 void Client::set_stealth(bool new_state) {
@@ -199,10 +191,10 @@ void Client::set_nick(const std::string & name) {
 	nick = name;
 }
 
-void Client::set_pbucket(uint16_t rate, uint16_t per) {
+void Client::set_pbucket(u16 rate, u16 per) {
 	pixupdlimit.set(rate, per);
-	uint8_t msg[5] = {SET_PQUOTA};
+	u8 msg[5] = {SET_PQUOTA};
 	memcpy(&msg[1], (char *)&rate, sizeof(rate));
 	memcpy(&msg[3], (char *)&per, sizeof(per));
-	ws.send((const char *)&msg, sizeof(msg), uWS::BINARY);
+	ws->send((const char *)&msg, sizeof(msg), uWS::BINARY);
 }

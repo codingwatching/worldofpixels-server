@@ -1,8 +1,9 @@
+src/keys.hpp
 chunkdata
+build
 out
 prepareUpload.sh
 whitelist.txt
 bans.txt
 blacklist.txt
-keys.hpp
 props.txt

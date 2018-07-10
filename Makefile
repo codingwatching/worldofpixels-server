@@ -1,14 +1,62 @@
-UWS = uWebSockets/src/Extensions.cpp uWebSockets/src/Group.cpp uWebSockets/src/WebSocketImpl.cpp uWebSockets/src/Networking.cpp uWebSockets/src/Hub.cpp uWebSockets/src/Node.cpp uWebSockets/src/WebSocket.cpp uWebSockets/src/HTTPSocket.cpp uWebSockets/src/Socket.cpp
+# https://stackoverflow.com/a/18258352
+rwildcard=$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
 
-INCLUDE = -I uWebSockets/src/
-LIBS = -luv -lcrypto -lssl -lz -lpthread -lcurl -DUSE_LIBUV
+SRC_FILES = $(call rwildcard, src/, *.cpp)
+OBJ_FILES = $(SRC_FILES:src/%.cpp=build/%.o)
+DEP_FILES = $(OBJ_FILES:.o=.d)
 
-OBJS = commands.cpp color.cpp server.cpp database.cpp client.cpp world.cpp limiter.cpp main.cpp AsyncHTTPGETClient.cpp TaskBuffer.cpp PropertyReader.cpp
+TARGET    = out
 
-OUT = out
+OPT_REL   = -O2
+LD_REL    = -s
+OPT_DBG   = -Og -g
 
-all:
-	g++ -std=c++11 -Wall -O2 $(INCLUDE) $(UWS) $(OBJS) $(LIBS) -o $(OUT)
+CPPFLAGS += -std=c++14
+CPPFLAGS += -MMD -MP
 
-debug:
-	g++ -std=c++11 -Wall -Og -g $(INCLUDE) $(UWS) $(OBJS) $(LIBS) -o $(OUT)
+UWS       = ./lib/uWebSockets
+JSON      = ./lib/json
+LIB_FILES = $(UWS)/libuWS.a
+
+CPPFLAGS += -I ./src/
+CPPFLAGS += -I $(UWS)/src/
+CPPFLAGS += -I $(JSON)/single_include/
+LDFLAGS  += -L $(UWS)/
+
+LDLIBS   += -lssl -lz -lcrypto -lcurl
+
+ifeq ($(OS),Windows_NT)
+	LDLIBS += -luv -lpthread -lWs2_32 -lpsapi -liphlpapi -luserenv
+endif
+
+.PHONY: all g dirs clean clean-all
+
+all: CPPFLAGS += $(OPT_REL)
+all: LDFLAGS  += $(LD_REL)
+all: dirs $(TARGET)
+
+g: CPPFLAGS += $(OPT_DBG)
+g: LDFLAGS  += $(LD_DBG)
+g: dirs $(TARGET)
+
+$(TARGET): $(OBJ_FILES) $(LIB_FILES)
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+dirs:
+	mkdir -p build/misc
+
+build/%.o: src/%.cpp
+	$(CXX) $(CPPFLAGS) -c -o $@ $<
+
+
+$(UWS)/libuWS.a:
+	$(MAKE) -C $(UWS) -f ../uWebSockets.mk
+
+
+clean:
+	- $(RM) $(TARGET) $(OBJ_FILES) $(DEP_FILES)
+
+clean-all: clean
+	$(MAKE) -C $(UWS) -f ../uWebSockets.mk clean
+
+-include $(DEP_FILES)
