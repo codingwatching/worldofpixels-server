@@ -65,10 +65,10 @@ AsyncHttp::CurlHandle::CurlHandle(CURLM * mHdl, std::string url,
 
 	curl_easy_setopt(easyHandle, CURLOPT_PRIVATE, this);
 	//curl_easy_setopt(easyHandle, CURLOPT_TIMEOUT, 60);
-	//curl_easy_setopt(easyHandle, CURLOPT_TCP_FASTOPEN, 1); REENABLE
+	curl_easy_setopt(easyHandle, CURLOPT_TCP_FASTOPEN, 1);
 	curl_easy_setopt(easyHandle, CURLOPT_WRITEFUNCTION, &AsyncHttp::CurlHandle::writer);
 	curl_easy_setopt(easyHandle, CURLOPT_WRITEDATA, &buffer);
-	//curl_easy_setopt(easyHandle, CURLOPT_PIPEWAIT, 1); REENABLE
+	curl_easy_setopt(easyHandle, CURLOPT_PIPEWAIT, 1);
 
 	curl_easy_setopt(easyHandle, CURLOPT_URL, url.c_str());
 
@@ -147,17 +147,17 @@ AsyncHttp::AsyncHttp(uS::Loop * loop)
 
 	timer->setData(this);
 
-	//curl_multi_setopt(multiHandle, CURLMOPT_PIPELINING, CURLPIPE_HTTP1 | CURLPIPE_MULTIPLEX); REENABLE
+	curl_multi_setopt(multiHandle, CURLMOPT_PIPELINING, CURLPIPE_HTTP1 | CURLPIPE_MULTIPLEX);
 	curl_multi_setopt(multiHandle, CURLMOPT_MAX_TOTAL_CONNECTIONS, 4);
 	curl_multi_setopt(multiHandle, CURLMOPT_MAX_HOST_CONNECTIONS, 4);
 	curl_multi_setopt(multiHandle, CURLMOPT_MAXCONNECTS, 6);
 }
 
 AsyncHttp::~AsyncHttp() {
-	if (timer && multiHandle) {
-		stopTimer();
-		timer->close(); /* This deletes the timer */
-		pendingRequests.clear();
+	stopTimer();
+	timer->close(); /* This deletes the timer */
+	pendingRequests.clear();
+	if (multiHandle) {
 		curl_multi_cleanup(multiHandle);
 	}
 }

@@ -21,6 +21,8 @@ public:
 	const std::string modpw;
 	const std::string adminpw;
 	const std::string path;
+	const i64 startupTime;
+	u32 totalConnections;
 	uWS::Hub h;
 	// To stop the server from a signal handler, or other thread
 	std::unique_ptr<uS::Async, void (*)(uS::Async *)> stopCaller;
@@ -67,9 +69,10 @@ public:
 
 	void admintell(const std::string&, bool modsToo = false);
 
+	void kickInactivePlayers();
 	void kickall(World * const);
 	void kickall();
-	void kickip(const std::string&);
+	bool kickip(const std::string&);
 
 	void clearexpbans();
 	void banip(const std::string&, i64);

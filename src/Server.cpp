@@ -18,7 +18,9 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 	  modpw(modpw),
 	  adminpw(adminpw),
 	  path(path + "/"),
-      h(uWS::NO_DELAY, true, 2048),
+	  startupTime(js_date_now()),
+	  totalConnections(0),
+	  h(uWS::NO_DELAY, true, 2048),
 	  stopCaller(new uS::Async(h.getLoop()), asyncDeleter),
 	  cmds(this),
 	  connlimiter(10, 5),
@@ -36,29 +38,65 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 	readfiles();
 
 	stopCaller->setData(this);
-	stopCaller->start(Server::doStop);
 
-	h.onHttpRequest([this](uWS::HttpResponse * res, uWS::HttpRequest req,
-	                    char * data, sz_t len, sz_t rem) {
-		std::cout << req.getUrl().toString() << std::endl;
-		/*res->hasHead = true;*/
-		std::string msg("o/");
+	auto printStatus = [this] (uWS::HttpResponse * res) {
+		std::string ip(res->getHttpSocket()->getAddress().address);
+		if (ip.compare(0, 7, "::ffff:") == 0) {
+			ip = ip.substr(7);
+		}
+
+		u8 yourConns = 0;
+		i64 banned = 0;
+		{ auto s = ipban.find(ip); if (s != ipban.end()) banned = s->second; }
+		{ auto s = conns.find(ip); if (s != conns.end()) yourConns = s->second; }
+
+		nlohmann::json j = {
+			{ "motd", "just testing lol" },
+			{ "totalConnections", totalConnections },
+			{ "captchaEnabled", captcha_required },
+			{ "maxConnectionsPerIp", maxconns },
+			{ "users", connsws.size() },
+			{ "uptime", js_date_now() - startupTime },
+			{ "yourIp", ip },
+			{ "yourConns", yourConns },
+			{ "banned", banned }
+		};
+
+		std::string msg(j.dump());
 		res->end(msg.data(), msg.size());
+	};
+
+	auto disconnectUser = [this] (uWS::HttpResponse * res) {
+		std::string ip(res->getHttpSocket()->getAddress().address);
+
+		nlohmann::json j = {
+			{ "hadEffect", kickip(ip) }
+		};
+
+		std::string msg(j.dump());
+		res->end(msg.data(), msg.size());
+	};
+
+	h.onHttpRequest([this, printStatus, disconnectUser](uWS::HttpResponse * res, uWS::HttpRequest req,
+	                    char * data, sz_t len, sz_t rem) {
+		std::string url(req.getUrl().toString());
+		if (url == "/") {
+			printStatus(res);
+		} else if (url == "/disconnectme") {
+			disconnectUser(res);
+		} else {
+			res->end("\"Unknown request\"", 17);
+		}
 	});
 
 	h.onConnection([this](uWS::WebSocket<uWS::SERVER> * ws, uWS::HttpRequest req) {
+		++totalConnections;
 		SocketInfo * si = new SocketInfo();
 		si->ip = ws->getAddress().address;
-		if (si->ip.compare(0, 7, "::ffff:") == 0) {
-			si->ip = si->ip.substr(7);
-		}
 
 		uWS::Header o = req.getHeader("origin", 6);
-		if (o) {
-			si->origin = o.toString();//std::string(ui.origin, ui.originLength);
-		} else {
-			si->origin = "(None)";
-		}
+		si->origin = o ? o.toString() : "(None)";
+
 		si->player = nullptr;
 		connsws.emplace(ws);
 		ws->setUserData(si);
@@ -231,11 +269,10 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 						}
 					}
 				} catch (const std::invalid_argument & e) {
-					std::cout << "Exception when parsing json by google!" << std::endl;
+					std::cout << "Exception when parsing json by google! (" << res.data << ")" << std::endl;
 					failReason = "API JSON parsing failed";
 					//ws.close(); to be safely fixed. captcha will be required to pass on connect
 					// not after connecting, will fix many issues.
-					return;
 				}
 
 				if (is_connected(ws)) { /* Let's hope this prevents all the bad stuff */
@@ -361,7 +398,7 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 Server::~Server() {
 	for (auto it = connsws.begin(); it != connsws.end();) {
 		auto client = *it++;
-		client->close();
+		client->terminate();
 	}
 	writefiles();
 }
@@ -373,7 +410,7 @@ void Server::broadcastmsg(const std::string& msg) {
 bool Server::listenAndRun(const std::string listenOn) {
     const char * host = listenOn.size() > 0 ? listenOn.c_str() : nullptr;
 
-    if (!h.listen(host, port)) {
+    if (!h.listen(host, port, nullptr, uS::ListenOptions::ONLY_IPV4)) {
 	    return false;
 	}
 
@@ -385,9 +422,12 @@ bool Server::listenAndRun(const std::string listenOn) {
 	}, 60);
 
 	saveTimer = tc.startTimer([this] {
+		kickInactivePlayers();
 	    save_now();
 	    return true;
-	}, 600000);
+	}, 900000);
+
+	stopCaller->start(Server::doStop);
 
 	h.run();
 	return true;
@@ -461,6 +501,17 @@ void Server::admintell(const std::string & msg, bool modsToo) {
 	}
 }
 
+void Server::kickInactivePlayers() {
+	i64 now = js_date_now();
+	for (auto it = connsws.begin(); it != connsws.end();) {
+		if (Client * c = static_cast<SocketInfo *>((*it++)->getUserData())->player) {
+			if (now - c->get_last_move() > 1200000 && !c->is_admin()) {
+				c->disconnect();
+			}
+		}
+	}
+}
+
 void Server::kickall(World * const wrld) {
 	for (auto it = connsws.begin(); it != connsws.end();) {
 		auto client = *it++;
@@ -483,7 +534,7 @@ void Server::kickall() {
 	}
 }
 
-void Server::kickip(const std::string & ip) {
+bool Server::kickip(const std::string & ip) {
 	bool useless = true;
 	for (auto it = connsws.begin(); it != connsws.end();) {
 		auto client = *it++;
@@ -497,6 +548,7 @@ void Server::kickip(const std::string & ip) {
 		admintell("DEVKicked IP: " + ip, true);
 		conns.erase(ip);
 	}
+	return !useless;
 }
 
 void Server::clearexpbans() {
