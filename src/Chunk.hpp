@@ -4,32 +4,26 @@
 
 #include <misc/color.hpp>
 #include <misc/explints.hpp>
+#include <misc/PngImage.hpp>
 #include <types.hpp>
 
-class Database;
-
 class Chunk {
-	Database * const db;
-	const u32 bgclr;
-	const i32 cx;
-	const i32 cy;
-	u8 data[16 * 16 * 3];
-	bool changed;
+	//const RGB bg;
+	const i32 x;
+	const i32 y;
+	WorldStorage& ws;
+	PngImage data;
+	u32 protectionData[16 * 16]; // split one chunk to 16x16 protections
+	// with specific GIDs
+	std::vector<u8> pngCache; // could get big
+	bool pngCacheOutdated;
+	bool pngFileOutdated;
 
 public:
-	bool ranked;
-
-	Chunk(const i32 cx, const i32 cy, const u32 bgclr, Database * const);
+	Chunk(i32 x, i32 y, RGB bg);
 	~Chunk();
 
-	sz_t compress_data_to(u8 (&msg)[16 * 16 * 3 + 10 + 4]);
-	uWS::WebSocket<uWS::SERVER>::PreparedMessage * get_prepd_data_msg();
-
-	bool set_data(const u8 x, const u8 y, const RGB);
-	void send_data(uWS::WebSocket<uWS::SERVER> *, bool compressed = false);
+	bool setPixel(u16 x, u16 y, RGB);
+	const std::vector<u8>& getPngData();
 	void save();
-
-	void clear(const RGB);
-	u8 * get_data();
-	void set_data(char const * const, sz_t);
 };

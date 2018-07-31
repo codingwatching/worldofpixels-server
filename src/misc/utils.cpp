@@ -56,3 +56,23 @@ i64 js_date_now() {
 	auto time = c::system_clock::now().time_since_epoch();
 	return c::duration_cast<c::milliseconds>(time).count();
 }
+
+std::vector<std::string> tokenize(const std::string& str,
+		char delimiter, bool trimEmpty) {
+	sz_t pos, lastPos = 0, length = str.length();
+	std::vector<std::string> tokens;
+	while (lastPos < length + 1) {
+		pos = str.find_first_of(delimiter, lastPos);
+		if (pos == std::string::npos) {
+			pos = length;
+		}
+
+		if (pos != lastPos || !trimEmpty) {
+			tokens.emplace_back(str.data() + lastPos, (sz_t)pos - lastPos);
+		}
+
+		lastPos = pos + 1;
+	}
+
+	return tokens;
+}

@@ -12,6 +12,7 @@
 #include <misc/Bucket.hpp>
 #include <misc/TimedCallbacks.hpp>
 #include <misc/AsyncHttp.hpp>
+#include <misc/ApiProcessor.hpp>
 
 class World;
 
@@ -36,6 +37,7 @@ public:
 	Bucket connlimiter;
 	TimedCallbacks tc;
 	AsyncHttp hcli;
+	ApiProcessor api;
 
 	u32 worldTickTimer;
 	u32 saveTimer;

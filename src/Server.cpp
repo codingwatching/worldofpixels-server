@@ -39,11 +39,8 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 
 	stopCaller->setData(this);
 
-	auto printStatus = [this] (uWS::HttpResponse * res) {
+	api.set("status", [this] (uWS::HttpResponse * res, auto args) {
 		std::string ip(res->getHttpSocket()->getAddress().address);
-		if (ip.compare(0, 7, "::ffff:") == 0) {
-			ip = ip.substr(7);
-		}
 
 		u8 yourConns = 0;
 		i64 banned = 0;
@@ -64,27 +61,55 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 
 		std::string msg(j.dump());
 		res->end(msg.data(), msg.size());
-	};
+		return ApiProcessor::OK;
+	});
 
-	auto disconnectUser = [this] (uWS::HttpResponse * res) {
+	api.set("disconnectme", [this] (uWS::HttpResponse * res, auto args) {
 		std::string ip(res->getHttpSocket()->getAddress().address);
 
 		nlohmann::json j = {
-			{ "hadEffect", kickip(ip) }
+			{ "hadEffect", this->kickip(ip) } // this-> required by gcc bug
 		};
 
 		std::string msg(j.dump());
 		res->end(msg.data(), msg.size());
-	};
+		return ApiProcessor::OK;
+	});
 
-	h.onHttpRequest([this, printStatus, disconnectUser](uWS::HttpResponse * res, uWS::HttpRequest req,
-	                    char * data, sz_t len, sz_t rem) {
-		std::string url(req.getUrl().toString());
-		if (url == "/") {
-			printStatus(res);
-		} else if (url == "/disconnectme") {
-			disconnectUser(res);
+	api.set("view", [this] (uWS::HttpResponse * res, auto args) {
+		if (args.size() != 4) return ApiProcessor::INVALID_ARGS;
+
+		World * w = nullptr;
+		i32 x = 0;
+		i32 y = 0;
+
+		{ auto s = worlds.find(args[1]); if (s != worlds.end()) w = s->second.get(); }
+		try {
+			x = std::stoi(args[2]);
+			y = std::stoi(args[3]);
+		} catch(...) { return ApiProcessor::INVALID_ARGS; }
+
+		if (w) {
+			res->end();
+			//u32 len;
+			//auto png = compressPng(w->get_chunk(x, y)->get_data(), 16, 16, 3, len);
+			//res->end(reinterpret_cast<char *>(png.get()), len);
 		} else {
+			res->end();
+		}
+
+		return ApiProcessor::OK;
+	});
+
+	h.onHttpRequest([this](uWS::HttpResponse * res, uWS::HttpRequest req,
+	                    char * data, sz_t len, sz_t rem) {
+		auto args(tokenize(req.getUrl().toString(), '/', true));
+
+		if (args.size() == 0) {
+			args.emplace_back("status");
+		}
+
+		if (auto status = api.exec(res, std::move(args))) {
 			res->end("\"Unknown request\"", 17);
 		}
 	});

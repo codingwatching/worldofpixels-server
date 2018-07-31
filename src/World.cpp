@@ -223,7 +223,8 @@ void World::send_chunk(uWS::WebSocket<uWS::SERVER> * ws, const i32 x, const i32 
 }
 
 void World::del_chunk(const i32 x, const i32 y, const RGB clr){
-	Chunk * const c = get_chunk(x, y);
+	#warning "FIXME"
+	/*Chunk * const c = get_chunk(x, y);
 	if(c){
 		c->clear(clr);
 		uWS::WebSocket<uWS::SERVER>::PreparedMessage * prep = c->get_prepd_data_msg();
@@ -231,12 +232,13 @@ void World::del_chunk(const i32 x, const i32 y, const RGB clr){
 			client->get_ws()->sendPrepared(prep);
 		}
 		uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
-	}
+	}*/
 }
 
 void World::paste_chunk(const i32 x, const i32 y, char const * const data){
+	#warning "FIXME"
 	Chunk * const c = get_chunk(x, y);
-	if(c){
+	/*if(c){
 		c->set_data(data, 16 * 16 * 3);
 
 		uWS::WebSocket<uWS::SERVER>::PreparedMessage * prep = c->get_prepd_data_msg();
@@ -244,7 +246,7 @@ void World::paste_chunk(const i32 x, const i32 y, char const * const data){
 			client->get_ws()->sendPrepared(prep);
 		}
 		uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
-	}
+	}*/
 }
 
 bool World::put_px(const i32 x, const i32 y, const RGB clr, u8 placerRank, u32 id) {

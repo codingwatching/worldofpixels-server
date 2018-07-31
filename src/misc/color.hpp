@@ -1,11 +1,15 @@
 #pragma once
 
 #include <cstdint>
+#include <misc/explints.hpp>
 
-struct RGB {
-	uint8_t r;
-	uint8_t g;
-	uint8_t b;
+union RGB {
+	struct {
+		u8 r;
+		u8 g;
+		u8 b;
+	};
+	u32 rgb;
 };
 
 double ColourDistance(RGB e1, RGB e2);
