@@ -18,13 +18,15 @@ Chunk::Chunk(i32 x, i32 y, const WorldStorage& ws)
   pngCacheOutdated(true),
   pngFileOutdated(false),
   moved(false) {
+	bool readerCalled = false;
   	auto fail = [this] {
   		std::cerr << "Protection data corrupted for chunk "
 		          << this->x << ", " << this->y << ". Resetting." << std::endl;
 		protectionData.fill(0);
   	};
 
-	data.setChunkReader("woPp", [this, fail] (u8 * d, sz_t size) {
+	data.setChunkReader("woPp", [this, fail, &readerCalled] (u8 * d, sz_t size) {
+		readerCalled = true;
 		try {
 			if (rle::getItems<u32>(d, size) != protectionData.size()) {
 				fail();
@@ -37,13 +39,22 @@ Chunk::Chunk(i32 x, i32 y, const WorldStorage& ws)
 	});
 
 	data.setChunkWriter("woPp", [this] () {
+		std::shared_lock<std::shared_timed_mutex> _(sm);
 		return rle::compress(protectionData.data(), protectionData.size());
 	});
 
 	std::string file(ws.getChunkFilePath(x, y));
 
 	lockChunk();
-	data.readFile(file);
+	if (fileExists(file)) {
+		data.readFile(file);
+		if (!readerCalled) {
+			protectionData.fill(0);
+		}
+	} else {
+		data.allocate(512, 512, ws.getBackgroundColor());
+		protectionData.fill(0);
+	}
 }
 
 Chunk::Chunk(Chunk&& c)
@@ -83,12 +94,14 @@ void Chunk::setProtectionGid(u8 x, u8 y, u32 gid) {
 	lastAction = jsDateNow();
 	x &= 0xF;
 	y &= 0xF;
+	std::unique_lock<std::shared_timed_mutex> _(sm);
 	protectionData[y * 16 + x] = gid;
 }
 
 u32 Chunk::getProtectionGid(u8 x, u8 y) const {
 	x &= 0xF;
 	y &= 0xF;
+	//std::shared_lock<std::shared_timed_mutex> _(sm);
 	return protectionData[y * 16 + x];
 }
 
@@ -138,7 +151,7 @@ void Chunk::lockChunk() {
 			<< " or was it not closed correctly? Reading anyway." << std::endl;
 	}
 
-	if (!std::fstream(file, std::ios::trunc)) {
+	if (!std::fstream(file, std::ios::trunc | std::ios::out | std::ios::binary)) {
 		std::cerr << "!!! Couldn't create/open lockfile. Permissions problem? Throwing exception "
 			<< "to prevent future problems." << std::endl;
 		throw std::runtime_error("Could not create chunk lockfile! World: " + ws.getWorldName()

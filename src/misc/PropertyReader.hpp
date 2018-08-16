@@ -19,9 +19,9 @@ public:
 	bool readFromDisk();
 	bool writeToDisk(bool force = false);
 
-	bool isEmpty();
-	bool hasProp(std::string key);
-	std::string getProp(std::string key, std::string defval = "");
+	bool isEmpty() const;
+	bool hasProp(std::string key) const;
+	std::string getProp(std::string key, std::string defval = "") const;
 	std::string getOrSetProp(std::string key, std::string defval);
 	void setProp(std::string key, std::string value);
 	bool delProp(std::string key);

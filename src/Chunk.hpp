@@ -2,6 +2,8 @@
 
 #include <array>
 #include <vector>
+#include <mutex>
+#include <shared_mutex>
 
 #include <misc/explints.hpp>
 #include <misc/color.hpp>
@@ -10,6 +12,7 @@
 class WorldStorage;
 
 class Chunk {
+	mutable std::shared_timed_mutex sm;
 	i64 lastAction;
 	const i32 x;
 	const i32 y;

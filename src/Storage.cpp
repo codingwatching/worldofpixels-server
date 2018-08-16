@@ -12,7 +12,11 @@
 WorldStorage::WorldStorage(std::string worldDir, std::string worldName)
 : PropertyReader(worldDir + "/props.cfg"),
   worldDir(std::move(worldDir)),
-  worldName(std::move(worldName)) { }
+  worldName(std::move(worldName)) {
+	if (!fileExists(this->worldDir) && !makeDir(this->worldDir)) {
+		throw std::runtime_error("Couldn't create world directory: " + this->worldDir);
+	}
+}
 
 const std::string& WorldStorage::getWorldName() const {
 	return worldName;
@@ -50,7 +54,7 @@ u16 WorldStorage::getPixelRate() {
 	return rate;
 }
 
-RGB WorldStorage::getBackgroundColor() {
+RGB WorldStorage::getBackgroundColor() const {
 	RGB clr = {255, 255, 255};
 	if (hasProp("bgcolor")) try {
 		clr.rgb = stoul(getProp("bgcolor"));
@@ -58,7 +62,7 @@ RGB WorldStorage::getBackgroundColor() {
 		//clr.rgb = (clr.rgb & 0xFF) << 16 | (clr.rgb & 0xFF00) | (clr.rgb & 0xFF0000) >> 16;
 	} catch(const std::exception& e) {
 		std::cerr << "Invalid color specified in world cfg" << worldName << ", resetting. (" << e.what() << ")" << std::endl;
-		delProp("bgcolor");
+		//delProp("bgcolor");
 	}
 	return clr;
 }
@@ -193,5 +197,5 @@ BansManager& Storage::getBansManager() {
 }
 
 WorldStorage Storage::getWorldStorageFor(std::string worldName) {
-	return WorldStorage(worldDirPath + "/" + worldName, std::move(worldName));
+	return WorldStorage(worldDirPath + "/" + worldName, worldName);
 }

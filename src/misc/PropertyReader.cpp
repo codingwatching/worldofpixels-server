@@ -61,15 +61,15 @@ bool PropertyReader::writeToDisk(bool force) {
 	return ok;
 }
 
-bool PropertyReader::isEmpty() {
+bool PropertyReader::isEmpty() const {
 	return props.empty();
 }
 
-bool PropertyReader::hasProp(std::string key) {
+bool PropertyReader::hasProp(std::string key) const {
 	return props.find(key) != props.end();
 }
 
-std::string PropertyReader::getProp(std::string key, std::string defval) {
+std::string PropertyReader::getProp(std::string key, std::string defval) const {
 	auto search = props.find(key);
 	if (search != props.end()) {
 		return search->second;

@@ -133,7 +133,7 @@ static void encodePng(size_t pngWidth, size_t pngHeight, const u8* data,
 	{
 		sz_t i = 0;
 		for (auto& chunk : chunkWriters) {
-			png_unknown_chunkp unk = &chunkArr[i++];
+			png_unknown_chunkp unk = &chunkArr[i];
 			std::copy_n(chunk.first.data(), 4, unk->name);
 			auto ret(chunk.second());
 			unk->data = ret.first.get();
@@ -141,6 +141,7 @@ static void encodePng(size_t pngWidth, size_t pngHeight, const u8* data,
 			unk->location = PNG_HAVE_PLTE;
 			// make the buffer live till the end of this function
 			toDelete[i] = std::move(ret.first);
+			i++;
 		}
 	}
 
