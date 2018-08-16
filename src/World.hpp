@@ -27,6 +27,8 @@ class World : public WorldStorage {
 	bool updateRequired;
 	bool drawRestricted;
 
+	std::function<void()> unload;
+
 	std::set<Client *> clients;
 	std::unordered_map<u64, Chunk> chunks;
 	std::map<u64, std::vector<uWS::HttpResponse *>> ongoingChunkRequests;
@@ -37,6 +39,12 @@ class World : public WorldStorage {
 
 public:
 	World(WorldStorage, TaskBuffer&);
+	~World();
+
+	World(World&&) = default;
+	World& operator=(World&&) = default;
+
+	void setUnloadFunc(std::function<void()>);
 
 	sz_t unloadOldChunks(bool force = false);
 	void update_all_clients();
@@ -74,4 +82,6 @@ public:
 
 private:
 	bool isActionPaintAllowed(const Chunk&, i32 x, i32 y, u8 rank); // to be changed
+	bool tryUnloadAllChunks();
+	void tryUnload();
 };

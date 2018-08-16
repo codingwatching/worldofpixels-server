@@ -100,7 +100,7 @@ Server::Server(std::string basePath)
 	});
 
 	h.onHttpRequest([this](uWS::HttpResponse * res, uWS::HttpRequest req,
-	                    char * data, sz_t len, sz_t rem) {
+						char * data, sz_t len, sz_t rem) {
 		auto args(tokenize(req.getUrl().toString(), '/', true));
 
 		if (args.size() == 0) {
@@ -374,9 +374,6 @@ Server::Server(std::string basePath)
 		if (si->player) {
 			World& w = si->player->get_world();
 			delete si->player;
-			if (w.is_empty()) {
-				worlds.erase(w.getWorldName());
-			}
 		}
 		auto search = conns.find(si->ip);
 		if (search != conns.end()) {
@@ -424,15 +421,15 @@ void Server::save_now() {
 	for (auto& world : worlds) {
 		world.second.save();
 	}
-	
+
 	std::cout << "Worlds saved." << std::endl;
 	admintell("DEVWorlds saved.");
 }
 
 void Server::tickWorlds() {
-    for (auto & w : worlds) {
-        w.second.send_updates();
-    }
+	for (auto & w : worlds) {
+		w.second.send_updates();
+	}
 }
 
 bool Server::verifyWorldName(const std::string& s) {
@@ -443,8 +440,8 @@ bool Server::verifyWorldName(const std::string& s) {
 
 	for (char c : s) {
 		if (!((c >  96 && c < 123) ||
-		      (c >  47 && c <  58) ||
-		       c == 95 || c == 46)) {
+			  (c >  47 && c <  58) ||
+			   c == 95 || c == 46)) {
 			return false;
 		}
 	}
@@ -460,6 +457,10 @@ const std::map<std::string, World>::iterator Server::getWorld(std::string name, 
 		search = worlds.emplace(std::piecewise_construct,
 			std::forward_as_tuple(name),
 			std::forward_as_tuple(s.getWorldStorageFor(name), tb)).first;
+
+		search->second.setUnloadFunc([this, search] {
+			worlds.erase(search);
+		});
 	}
 
 	return search;

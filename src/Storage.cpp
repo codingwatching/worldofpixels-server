@@ -5,6 +5,9 @@
 #include <stdexcept>
 #include <memory>
 #include <fstream>
+#include <cstdio>
+#include <vector>
+#include <map>
 
 #include <misc/utils.hpp>
 #include <config.hpp>
@@ -104,7 +107,8 @@ void WorldStorage::setGlobalModeratorsAllowed(bool b) {
 }
 
 void WorldStorage::convertProtectionData(std::function<void(i32, i32)> f) {
-	std::ifstream file(worldDir + "/pchunks.bin", std::ios::binary | std::ios::ate);
+	std::string name(worldDir + "/pchunks.bin");
+	std::ifstream file(name, std::ios::binary | std::ios::ate);
 	if (file) {
 		const sz_t size = file.tellg();
 		if (size % 8) { // not multiple of 8?
@@ -112,21 +116,47 @@ void WorldStorage::convertProtectionData(std::function<void(i32, i32)> f) {
 				<< worldDir << ", ignoring." << std::endl;
 		} else {
 			const sz_t itemsonfile = size / 8;
+			std::cout << "Starting conversion of protected chunk data (" << itemsonfile << " chunks)" << std::endl;
 			auto rankedarr(std::make_unique<u64[]>(itemsonfile));
 			file.seekg(0);
 			file.read((char*)rankedarr.get(), size);
+			union twoi32 {
+				struct {
+					i32 x;
+					i32 y;
+				} p;
+				u64 pos;
+			};
+			std::map<u64, std::vector<twoi32>> clust;
 			for (sz_t i = 0; i < itemsonfile; i++) {
-				union {
-					struct {
-						i32 x;
-						i32 y;
-					} p;
-					u64 pos;
-				} s;
+				twoi32 s, c;
 				s.pos = rankedarr[i];
-				f(s.p.x, s.p.y);
+				c.p.x = s.p.x >> 5;
+				c.p.y = s.p.y >> 5;
+				auto sr = clust.find(c.pos);
+				if (sr == clust.end()) {
+					clust.emplace(std::make_pair(c.pos, std::vector<twoi32>{s}));
+				} else {
+					sr->second.push_back(s);
+				}
+				if (!(i % 1024)) {
+					std::cout << "Sort progress: " << i << "/" << itemsonfile << " (" << (i * 100 / itemsonfile) << "%)" << std::endl;
+				}
+			}
+			sz_t i = 0;
+			sz_t c = 0;
+			for (const auto& v : clust) {
+				for (const twoi32 s : v.second) {
+					f(s.p.x, s.p.y);
+					if (!(i % 512)) {
+						std::cout << "Conv. progress: " << i << "/" << itemsonfile << " (" << (i * 100 / itemsonfile) << "%, c: " << c << ")" << std::endl;
+					}
+					++i;
+				}
+				++c;
 			}
 		}
+		std::remove(name.c_str());
 	}
 }
 

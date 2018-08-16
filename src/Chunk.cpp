@@ -91,7 +91,7 @@ bool Chunk::setPixel(u16 x, u16 y, RGB clr) {
 }
 
 void Chunk::setProtectionGid(u8 x, u8 y, u32 gid) {
-	lastAction = jsDateNow();
+	//lastAction = jsDateNow();
 	x &= 0xF;
 	y &= 0xF;
 	std::unique_lock<std::shared_timed_mutex> _(sm);

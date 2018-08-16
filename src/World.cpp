@@ -34,29 +34,37 @@ World::World(WorldStorage ws, TaskBuffer& tb)
 	});
 }
 
+World::~World() {
+	std::cout << "World unloaded: " << getWorldName() << std::endl;
+}
+
+void World::setUnloadFunc(std::function<void()> unloadFunc) {
+	unload = std::move(unloadFunc);
+}
+
 sz_t World::unloadOldChunks(bool force) {
 	sz_t unloadCount = 0;
 
-	auto oldest = chunks.end();
+	//auto oldest = chunks.end();
 
 	for (auto it = chunks.begin(); it != chunks.end();) {
 		if (it->second.shouldUnload(force)) {
-			if (force && (oldest == chunks.end() || it->second.getLastActionTime() < oldest->second.getLastActionTime())) {
+			/*if (force && (oldest == chunks.end() || it->second.getLastActionTime() < oldest->second.getLastActionTime())) {
 				oldest = it;
-			} else {
+			} else {*/
 				it = chunks.erase(it);
 				++unloadCount;
-			}
+			//}
 		} else {
 			++it;
 		}
 	}
-
+/*
 	if (oldest != chunks.end()) {
 		chunks.erase(oldest);
 		return 1;
 	}
-
+*/
 	return unloadCount;
 }
 
@@ -95,8 +103,9 @@ void World::rm_cli(Client * const cl) {
 	clients.erase(cl);
 	plupdates.erase(cl);
 	ids.freeId(cl->get_id());
-	if (clients.size()) {
-		sched_updates();
+	sched_updates();
+	if (!clients.size()) {
+		tryUnload();
 	}
 }
 
@@ -216,14 +225,16 @@ const std::unordered_map<u64, Chunk>::iterator World::get_chunk(const i32 x, con
 	}
 	auto search = chunks.find(key(x, y));
 	if (search == chunks.end()) {
-		if (chunks.size() > 512) {
-			unloadOldChunks();
-		}
 		if (create) {
 			WorldStorage& ws = *this;
 			search = chunks.emplace(std::piecewise_construct,
 				std::forward_as_tuple(key(x, y)),
 				std::forward_as_tuple(x, y, ws)).first;
+			if (chunks.size() > 64) {
+				search->second.preventUnloading(true);
+				unloadOldChunks(true);
+				search->second.preventUnloading(false);
+			}
 		}
 	}
 
@@ -262,11 +273,12 @@ void World::send_chunk(uWS::HttpResponse * res, i32 x, i32 y) {
 
 			ongoingChunkRequests.erase(search);
 			c.preventUnloading(false);
+			tryUnload();
 		};
 
 		tb.queue([&c, end](TaskBuffer& tb) {
 			c.updatePngCache();
-			tb.runInMainThread(end);
+			tb.runInMainThread(std::move(end));
 		});
 	} else {
 		// add this request to the list, if a png is already being encoded
@@ -325,16 +337,18 @@ void World::setChunkProtection(i32 x, i32 y, bool state) {
 	// x and y are already divided by 16
 	chunk->second.setProtectionGid(x & 0xF, y & 0xF, state ? 1 : 0);
 
-	u8 msg[10] = {CHUNK_PROTECTED};
-	memcpy(&msg[1], (char *)&x, 4);
-	memcpy(&msg[5], (char *)&y, 4);
-	memcpy(&msg[9], (char *)&state, 1);
-	uWS::WebSocket<uWS::SERVER>::PreparedMessage * prep = uWS::WebSocket<uWS::SERVER>::prepareMessage(
-		(char *)&msg[0], sizeof(msg), uWS::BINARY, false);
-	for(auto client : clients){
-		client->get_ws()->sendPrepared(prep);
+	if (clients.size() != 0) {
+		u8 msg[10] = {CHUNK_PROTECTED};
+		memcpy(&msg[1], (char *)&x, 4);
+		memcpy(&msg[5], (char *)&y, 4);
+		memcpy(&msg[9], (char *)&state, 1);
+		uWS::WebSocket<uWS::SERVER>::PreparedMessage * prep = uWS::WebSocket<uWS::SERVER>::prepareMessage(
+			(char *)&msg[0], sizeof(msg), uWS::BINARY, false);
+		for (auto client : clients) {
+			client->get_ws()->sendPrepared(prep);
+		}
+		uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
 	}
-	uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
 }
 
 void World::broadcast(const std::string& msg) const {
@@ -385,4 +399,17 @@ bool World::isActionPaintAllowed(const Chunk& c, i32 x, i32 y, u8 rank) {
 	x >>= 4; x &= 0xF; // divide by 16 and mod 16
 	y >>= 4; y &= 0xF;
 	return c.getProtectionGid(x, y) == 0 || rank >= Client::MODERATOR;
+}
+
+bool World::tryUnloadAllChunks() {
+	for (auto it = chunks.begin(); it != chunks.end();) {
+		it = it->second.shouldUnload(true) ? chunks.erase(it) : std::next(it);
+	}
+	return chunks.size() == 0;
+}
+
+void World::tryUnload() {
+	if (!clients.size() && tryUnloadAllChunks()) {
+		unload();
+	}
 }

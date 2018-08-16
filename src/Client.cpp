@@ -22,7 +22,7 @@ Client::Client(uWS::WebSocket<uWS::SERVER> * ws, World& wrld, SocketInfo * si)
   lastclr({0, 0, 0}),
   si(si),
   mute(false) {
-	std::cout << "(" << wrld.getWorldName() << "/" << si->ip << ") New client! ID: " << id << std::endl;
+
 }
 
 Client::~Client() {
@@ -196,4 +196,5 @@ void Client::set_id(u32 nid) {
 	u8 msg[5] = {SET_ID};
 	memcpy(&msg[1], (char *)&id, sizeof(id));
 	ws->send((const char *)&msg, sizeof(msg), uWS::BINARY);
+	std::cout << "(" << wrld.getWorldName() << "/" << si->ip << ") New client! ID: " << id << std::endl;
 }
