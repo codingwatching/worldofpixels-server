@@ -6,42 +6,32 @@
 
 #include <misc/utils.hpp>
 
-Client::Client(const u32 id, uWS::WebSocket<uWS::SERVER> * ws, World * const wrld, SocketInfo * si)
-		: nick(),
-		  dellimit(1, 1),
-		  pixupdlimit(0, 1),
-		  chatlimit(4, 6),
-		  lastMovement(js_date_now() - 900000), /* 5 min timeout for the now-joined players */
-		  ws(ws),
-		  wrld(wrld),
-		  penalty(0),
-		  handledelete(true),
-		  rank(NONE),
-		  stealthadmin(false),
-		  suspicious(si->origin != "http://ourworldofpixels.com"),
-		  compressionEnabled(false),
-		  pos({0, 0, 0, 0, 0, 0}),
-		  lastclr({0, 0, 0}),
-		  id(id),
-		  si(si),
-		  mute(false){
-	std::cout << "(" << wrld->name << "/" << si->ip << ") New client! ID: " << id << std::endl;
-	u8 msg[5] = {SET_ID};
-	memcpy(&msg[1], (char *)&id, sizeof(id));
-	ws->send((const char *)&msg, sizeof(msg), uWS::BINARY);
+Client::Client(uWS::WebSocket<uWS::SERVER> * ws, World& wrld, SocketInfo * si)
+: id(0),
+  nick(),
+  pixupdlimit(0, 1),
+  chatlimit(4, 6),
+  lastMovement(jsDateNow() - 900000), /* 5 min timeout for the now-joined players */
+  ws(ws),
+  wrld(wrld),
+  penalty(0),
+  rank(NONE),
+  stealthadmin(false),
+  suspicious(si->origin != "http://ourworldofpixels.com"),
+  pos({0, 0, 0, 0, 0, 0}),
+  lastclr({0, 0, 0}),
+  si(si),
+  mute(false) {
+	std::cout << "(" << wrld.getWorldName() << "/" << si->ip << ") New client! ID: " << id << std::endl;
 }
 
 Client::~Client() {
-	wrld->rm_cli(this);
+	wrld.rm_cli(this);
 	/* std::cout << "Client deleted! ID: " << id << std::endl; */
 }
 
 bool Client::can_edit() {
 	return pixupdlimit.can_spend();
-}
-
-void Client::get_chunk(const i32 x, const i32 y) const {
-	wrld->send_chunk(ws, x, y);
 }
 
 void Client::put_px(const i32 x, const i32 y, const RGB clr) {
@@ -56,7 +46,7 @@ void Client::put_px(const i32 x, const i32 y, const RGB clr) {
 			}
 		}
 		lastclr = clr;
-		wrld->put_px(x, y, clr, rank, id);
+		wrld.put_px(x, y, clr, rank, id);
 		updated();
 	} else {
 		warn();
@@ -64,8 +54,8 @@ void Client::put_px(const i32 x, const i32 y, const RGB clr) {
 }
 
 void Client::del_chunk(const i32 x, const i32 y, const RGB clr) {
-	if ((is_mod() && dellimit.can_spend()) || is_admin()) {
-		wrld->del_chunk(x, y, clr);
+	if ((is_mod() && can_edit()) || is_admin()) {
+		wrld.del_chunk(x, y, clr);
 	}
 }
 
@@ -76,12 +66,12 @@ void Client::teleport(const i32 x, const i32 y) {
 	ws->send((const char *)&msg, sizeof(msg), uWS::BINARY);
 	pos.x = (x << 4) + 8;
 	pos.y = (y << 4) + 8;
-	wrld->upd_cli(this);
+	wrld.upd_cli(this);
 }
 
 void Client::move(const pinfo_t& newpos) {
 	pos = newpos;
-	wrld->upd_cli(this);
+	wrld.upd_cli(this);
 	updated();
 }
 
@@ -95,7 +85,7 @@ bool Client::can_chat() {
 
 void Client::chat(const std::string& msg) {
 	if (!mute) {
-		wrld->broadcast(get_nick() + ": " + msg);
+		wrld.broadcast(get_nick() + ": " + msg);
 	} else {
 		tell(get_nick() + ": " + msg);
 	}
@@ -106,7 +96,7 @@ void Client::tell(const std::string& msg) {
 }
 
 void Client::updated() {
-	lastMovement = js_date_now();
+	lastMovement = jsDateNow();
 }
 
 void Client::disconnect() {
@@ -165,7 +155,7 @@ std::string Client::get_nick() const {
 	return e;
 }
 
-World * Client::get_world() const {
+World& Client::get_world() const {
 	return wrld;
 }
 
@@ -181,6 +171,10 @@ i64 Client::get_last_move() const {
 	return lastMovement;
 }
 
+u32 Client::get_id() const {
+	return id;
+}
+
 void Client::set_stealth(bool new_state) {
 	stealthadmin = new_state;
 }
@@ -194,5 +188,12 @@ void Client::set_pbucket(u16 rate, u16 per) {
 	u8 msg[5] = {SET_PQUOTA};
 	memcpy(&msg[1], (char *)&rate, sizeof(rate));
 	memcpy(&msg[3], (char *)&per, sizeof(per));
+	ws->send((const char *)&msg, sizeof(msg), uWS::BINARY);
+}
+
+void Client::set_id(u32 nid) {
+	id = nid;
+	u8 msg[5] = {SET_ID};
+	memcpy(&msg[1], (char *)&id, sizeof(id));
 	ws->send((const char *)&msg, sizeof(msg), uWS::BINARY);
 }

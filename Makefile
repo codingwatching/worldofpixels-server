@@ -23,10 +23,11 @@ CPPFLAGS += -I $(UWS)/src/
 CPPFLAGS += -I $(JSON)/single_include/
 LDFLAGS  += -L $(UWS)/
 
-LDLIBS   += -lssl -lz -lcrypto -lcurl
+LIBPNGLDL = $(shell libpng-config --ldflags)
+LDLIBS   += -lssl -lz -lcrypto -lcurl -lpthread $(LIBPNGLDL)
 
 ifeq ($(OS),Windows_NT)
-	LDLIBS += -luv -lpthread -lWs2_32 -lpsapi -liphlpapi -luserenv
+	LDLIBS += -luv -lWs2_32 -lpsapi -liphlpapi -luserenv
 endif
 
 .PHONY: all g dirs clean clean-all

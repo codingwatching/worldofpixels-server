@@ -1,47 +1,48 @@
 #pragma once
 
-#include <Database.hpp>
+#include <Storage.hpp>
 #include <Client.hpp>
 #include <Chunk.hpp>
 #include <types.hpp>
 
 #include <misc/color.hpp>
 #include <misc/explints.hpp>
+#include <misc/IdSys.hpp>
+#include <misc/TaskBuffer.hpp>
 
 #include <string>
 #include <set>
 #include <unordered_map>
+#include <map>
 #include <vector>
+#include <mutex>
 
-class World {
+namespace uWS {
+	struct HttpResponse;
+}
+
+class World : public WorldStorage {
+	IdSys ids;
+	TaskBuffer& tb; // for http chunk requests
 	bool updateRequired;
-	u32 bgclr;
-	u32 pids;
-	u16 paintrate;
-	u8 defaultRank;
-	Database db;
-	std::string pass;
+	bool drawRestricted;
+
 	std::set<Client *> clients;
-	std::unordered_map<u64, Chunk *> chunks;
+	std::unordered_map<u64, Chunk> chunks;
+	std::map<u64, std::vector<uWS::HttpResponse *>> ongoingChunkRequests;
+
 	std::vector<pixupd_t> pxupdates;
 	std::set<Client *> plupdates;
 	std::set<u32> plleft;
 
 public:
-	const std::string name;
+	World(WorldStorage, TaskBuffer&);
 
-	World(const std::string& path, const std::string& name);
-	~World();
-
+	sz_t unloadOldChunks(bool force = false);
 	void update_all_clients();
 
 	void setChunkProtection(i32 x, i32 y, bool state);
 
-	void reload();
-	std::string getProp(std::string key, std::string defval = "");
-	void setProp(std::string key, std::string value);
-
-	u32 get_id();
 	void add_cli(Client * const);
 	void upd_cli(Client * const);
 	void rm_cli(Client * const);
@@ -53,11 +54,12 @@ public:
 	void sched_updates();
 	void send_updates();
 
-	Chunk * get_chunk(const i32 x, const i32 y, bool create = true);
-	void send_chunk(uWS::WebSocket<uWS::SERVER> *, const i32 x, const i32 y, bool compressed = false);
-	void del_chunk(const i32 x, const i32 y, const RGB);
+	const std::unordered_map<u64, Chunk>::iterator get_chunk(i32 x, i32 y, bool create = true);
+	void send_chunk(uWS::HttpResponse *, i32 x, i32 y);
+
+	void del_chunk(i32 x, i32 y, const RGB);
 	void paste_chunk(const i32 x, const i32 y, char const * const);
-	bool put_px(const i32 x, const i32 y, const RGB, u8 placerRank, u32 id);
+	bool put_px(i32 x, i32 y, const RGB, u8 placerRank, u32 id);
 
 	void broadcast(const std::string& msg) const;
 
@@ -65,8 +67,11 @@ public:
 
 	bool is_empty() const;
 	bool mods_enabled();
-	bool is_pass(std::string const&) const;
-	void set_default_rank(u8);
+	bool is_pass(std::string const&);
 	u8 get_default_rank();
+	void restrictDrawing(bool);
 	u16 get_paintrate();
+
+private:
+	bool isActionPaintAllowed(const Chunk&, i32 x, i32 y, u8 rank); // to be changed
 };

@@ -8,9 +8,11 @@
 	#include <windows.h>
 #endif
 
+#include <algorithm>
 #include <chrono>
+#include <random>
 
-bool makedir(const std::string& dir) {
+bool makeDir(const std::string& dir) {
 #ifndef __WIN32
 	return mkdir(dir.c_str(), 0755) == 0;
 #else
@@ -29,7 +31,7 @@ bool fileExists(const std::string& path) {
 #endif
 }
 
-sz_t getUTF8strlen(const std::string& str) {
+sz_t getUtf8StrLen(const std::string& str) {
 	sz_t j = 0, i = 0, x = 1;
 	while (i < str.size()) {
 		if (x > 4) { /* Invalid unicode */
@@ -50,7 +52,7 @@ sz_t getUTF8strlen(const std::string& str) {
 	return (j);
 }
 
-i64 js_date_now() {
+i64 jsDateNow() {
 	namespace c = std::chrono;
 
 	auto time = c::system_clock::now().time_since_epoch();
@@ -75,4 +77,24 @@ std::vector<std::string> tokenize(const std::string& str,
 	}
 
 	return tokens;
+}
+
+std::string randomStr(sz_t size) { // WARNING: RNG not thread safe
+	std::string str(size, '\0');
+
+	std::generate(str.begin(), str.end(), [] {
+		static const char alphanum[] =
+			"0123456789?_@#$!"
+			"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+			"abcdefghijklmnopqrstuvwxyz";
+
+		// std::random_device{}() returns a random number, used as seed for the
+		// std::default_random_engine
+		static std::default_random_engine rng(std::random_device{}());
+		static std::uniform_int_distribution<sz_t> get(0, sizeof(alphanum) - 2);
+
+		return alphanum[get(rng)];
+	});
+
+	return str;
 }

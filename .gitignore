@@ -1,9 +1,7 @@
 src/keys.hpp
-chunkdata
+world_data
 build
 out
 prepareUpload.sh
-whitelist.txt
-bans.txt
-blacklist.txt
-props.txt
+bans.json
+props.cfg

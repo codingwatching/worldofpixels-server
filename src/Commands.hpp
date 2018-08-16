@@ -28,9 +28,9 @@ public:
 	static void modlogin(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 	static void adminlogin(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 
-	static void getprop(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
-	static void setprop(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
-	static void reload(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
+//	static void getprop(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
+//	static void setprop(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
+//	static void reload(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 
 	static void teleport(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 	static void stealth(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
@@ -51,13 +51,13 @@ public:
 	static void whois(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 	static void bans(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 	static void bansuspicious(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
-	static void whitelist(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
-	static void blacklist(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
+//	static void whitelist(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
+//	static void blacklist(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 	static void ids(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 	static void nick(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 	static void tell(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 	static void mute(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
-	static void worlds(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
+//	static void worlds(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 
 	static void broadcast(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);
 	static void totalonline(Server * const, const Commands * const, Client * const, const std::vector<std::string>& args);

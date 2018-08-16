@@ -10,7 +10,7 @@
 #include <iostream>
 
 Commands::Commands(Server * const sv) {
-	usrcmds = {
+/*	usrcmds = {
 		{"nick", std::bind(Commands::nick, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"pass", std::bind(Commands::pass, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"tell", std::bind(Commands::tell, sv, this, std::placeholders::_1, std::placeholders::_2)},
@@ -24,8 +24,8 @@ Commands::Commands(Server * const sv) {
 		{"kickip", std::bind(Commands::kickip, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"banip", std::bind(Commands::banip, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"bans", std::bind(Commands::bans, sv, this, std::placeholders::_1, std::placeholders::_2)},
-		{"whitelist", std::bind(Commands::whitelist, sv, this, std::placeholders::_1, std::placeholders::_2)},
-		{"blacklist", std::bind(Commands::blacklist, sv, this, std::placeholders::_1, std::placeholders::_2)},
+//		{"whitelist", std::bind(Commands::whitelist, sv, this, std::placeholders::_1, std::placeholders::_2)},
+//		{"blacklist", std::bind(Commands::blacklist, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"setrank", std::bind(Commands::setrank, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"whois", std::bind(Commands::whois, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"stealth", std::bind(Commands::stealth, sv, this, std::placeholders::_1, std::placeholders::_2)},
@@ -40,19 +40,19 @@ Commands::Commands(Server * const sv) {
 	admincmds = {
 		{"save", std::bind(Commands::save, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"kickall", std::bind(Commands::kickall, sv, this, std::placeholders::_1, std::placeholders::_2)},
-		{"setprop", std::bind(Commands::setprop, sv, this, std::placeholders::_1, std::placeholders::_2)},
-		{"getprop", std::bind(Commands::getprop, sv, this, std::placeholders::_1, std::placeholders::_2)},
-		{"reload", std::bind(Commands::reload, sv, this, std::placeholders::_1, std::placeholders::_2)},
+//		{"setprop", std::bind(Commands::setprop, sv, this, std::placeholders::_1, std::placeholders::_2)},
+//		{"getprop", std::bind(Commands::getprop, sv, this, std::placeholders::_1, std::placeholders::_2)},
+//		{"reload", std::bind(Commands::reload, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"lockdown", std::bind(Commands::lockdown, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"bansuspicious", std::bind(Commands::bansuspicious, sv, this, std::placeholders::_1, std::placeholders::_2)},
-		{"worlds", std::bind(Commands::worlds, sv, this, std::placeholders::_1, std::placeholders::_2)},
+//		{"worlds", std::bind(Commands::worlds, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"setpbucket", std::bind(Commands::setpbucket, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"doas", std::bind(Commands::doas, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"broadcast", std::bind(Commands::broadcast, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"totalonline", std::bind(Commands::totalonline, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"tellraw", std::bind(Commands::tellraw, sv, this, std::placeholders::_1, std::placeholders::_2)},
 		{"sayraw", std::bind(Commands::sayraw, sv, this, std::placeholders::_1, std::placeholders::_2)}
-	};
+	};*/
 }
 
 std::string Commands::get_cmd_list(u8 rank) const {
@@ -110,14 +110,14 @@ bool Commands::exec(Client * const cl, const std::string& msg) const {
 			case Client::ADMIN:
 				search = admincmds.find(args[0]);
 				if(search != admincmds.end()){
-					std::cout << "Admin: " << cl->id << " (" << cl->get_world()->name
+					std::cout << "Admin: " << cl->get_id() << " (" << cl->get_world().getWorldName()
 					<< ", " << cl->si->ip << ") Executed: " << msg << std::endl;
 					break;
 				}
 			case Client::MODERATOR:
 				search = modcmds.find(args[0]);
 				if(search != modcmds.end()){
-					std::cout << "Mod: " << cl->id << " (" << cl->get_world()->name
+					std::cout << "Mod: " << cl->get_id() << " (" << cl->get_world().getWorldName()
 					<< ", " << cl->si->ip << ") Executed: " << msg << std::endl;
 					break;
 				}
@@ -141,7 +141,7 @@ bool Commands::exec(Client * const cl, const std::string& msg) const {
 	}
 	return false;
 }
-
+#if 0
 void Commands::pass(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() > 1) {
@@ -169,7 +169,7 @@ void Commands::modlogin(Server * const sv, const Commands * const cmd,
 				cl->tell("Sorry, but moderators are disabled on this world.");
 				return;
 			}
-			std::string msg("DEV" + std::to_string(cl->id) + " (" + cl->get_world()->name + ", " + cl->si->ip + ") Got mod");
+			std::string msg("DEV" + std::to_string(cl->get_id()) + " (" + cl->get_world().getWorldName() + ", " + cl->si->ip + ") Got mod");
 			std::cout << msg << std::endl;
 			sv->admintell(msg);
 			cl->promote(Client::MODERATOR, cl->get_world()->get_paintrate());
@@ -184,7 +184,7 @@ void Commands::adminlogin(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if(!cl->is_admin() && args.size() == 2){
 		if(sv->is_adminpw(args[1])){
-			std::cout << "User: " << cl->id << " (" << cl->get_world()->name
+			std::cout << "User: " << cl->get_id() << " (" << cl->get_world().getWorldName()
 					<< ", " << cl->si->ip << ") Got admin!" << std::endl;
 			cl->promote(Client::ADMIN, cl->get_world()->get_paintrate());
 		} else {
@@ -218,7 +218,7 @@ void Commands::banip(Server * const sv, const Commands * const cmd,
 		if (t >= 0) {
 			t *= 1000;
 			t *= 60;
-			t += js_date_now();
+			t += jsDateNow();
 		}
 		sv->banip(args[1], t);
 	} else {
@@ -272,7 +272,7 @@ void Commands::getid(Server * const sv, const Commands * const cmd,
 		}
 		Client * const c = cl->get_world()->get_cli(name);
 		if (c) {
-			cl->tell("ID: " + std::to_string(c->id));
+			cl->tell("ID: " + std::to_string(c->get_id()));
 		} else {
 			cl->tell("User not found!");
 		}
@@ -340,9 +340,9 @@ void Commands::teleport(Server * const sv, const Commands * const cmd,
 void Commands::restrict(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	if (args.size() == 2) {
-		u8 newstate = args[1] == "true" ? Client::NONE : Client::USER;
-		cl->get_world()->set_default_rank(newstate);
-		std::string msg("Draw restriction is " + (newstate == Client::NONE ? std::string("ON") : std::string("OFF")));
+		bool newstate = args[1] == "true";
+		cl->get_world()->restrictDrawing(newstate);
+		std::string msg("Draw restriction is " + (newstate ? std::string("ON") : std::string("OFF")));
 		cl->tell(msg);
 	} else {
 		cl->tell("Restricts drawing to all NEW users in this world. (manually grant with /setrank (id) 1");
@@ -527,7 +527,7 @@ void Commands::ids(Server * const sv, const Commands * const cmd,
 	std::set<Client *> * const plset = w->get_pl();
 	std::string str("Total: " + std::to_string(plset->size()) + "; ");
 	for (auto c : *plset) {
-		str += std::to_string(c->id) + ", ";
+		str += std::to_string(c->get_id()) + ", ";
 	}
 	cl->tell(str);
 }
@@ -540,14 +540,14 @@ void Commands::nick(Server * const sv, const Commands * const cmd,
 			name.append(" " + args[i]);
 		}
 		name.erase(std::remove(name.begin(), name.end(), '\n'), name.end());
-		sz_t size = getUTF8strlen(name);
+		sz_t size = getUtf8StrLen(name);
 		if (name.size() < 1) return;
 		if (cl->is_admin()) {
 			cl->set_nick(name);
 		} else if (cl->is_mod() && size <= 40) {
 			cl->set_nick("(M) " + name);
 		} else if (size <= 12) {
-			cl->set_nick("[" + std::to_string(cl->id) + "] " + name);
+			cl->set_nick("[" + std::to_string(cl->get_id()) + "] " + name);
 		} else {
 			cl->tell("Nickname too long! (Max: " + std::to_string(cl->is_mod() ? 40 : 12) + ")");
 			return;
@@ -576,8 +576,8 @@ void Commands::tell(Server * const sv, const Commands * const cmd,
 		}
 		Client * const target = cl->get_world()->get_cli(id);
 		if(target) {
-			cl->tell("-> You tell " + std::to_string(target->id) + ": " + msg);
-			target->tell("-> " + std::to_string(cl->id) + " tells you: " + msg);
+			cl->tell("-> You tell " + std::to_string(target->get_id()) + ": " + msg);
+			target->tell("-> " + std::to_string(cl->get_id()) + " tells you: " + msg);
 		} else {
 			cl->tell("User not found!");
 		}
@@ -591,7 +591,7 @@ void Commands::bans(Server * const sv, const Commands * const cmd,
 	sv->clearexpbans();
 	auto * banarr = sv->getbans();
 	if (args.size() == 2) {
-		i64 now = js_date_now();
+		i64 now = jsDateNow();
 		if (args[1] == "list") {
 			for (auto & ip : *banarr) {
 				cl->tell("-> " + ip.first + "(" + std::to_string(ip.second < 0 ? -1 : (ip.second - now) / 1000) + ")");
@@ -831,3 +831,4 @@ void Commands::save(Server * const sv, const Commands * const cmd,
 			Client * const cl, const std::vector<std::string>& args) {
 	sv->save_now();
 }
+#endif

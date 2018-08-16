@@ -4,24 +4,11 @@
 #include <Server.hpp>
 #include <misc/PropertyReader.hpp>
 
-#include <signal.h>
-
 /* Just for the signal handler */
 std::unique_ptr<Server> s;
 
 void stopServer() {
 	s->stop();
-}
-
-std::string gen_random_str(const sz_t size) {
-	static const char alphanum[] =
-		"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz?_";
-
-	std::string str(size, '0');
-	for(sz_t i = 0; i < size; ++i){
-		str[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
-	}
-	return str;
 }
 
 #ifdef _WIN32
@@ -51,7 +38,8 @@ void signalHandler(int s) {
 }
 
 bool installSignalHandler() {
-	return std::signal(SIGINT, signalHandler) != SIG_ERR;
+	return std::signal(SIGINT, signalHandler) != SIG_ERR
+		&& std::signal(SIGTERM, signalHandler) != SIG_ERR;
 }
 
 #endif
@@ -59,32 +47,14 @@ bool installSignalHandler() {
 int main(int argc, char * argv[]) {
 	std::cout << "Starting server..." << std::endl;
 
-	srand(time(NULL));
-
 	if (!installSignalHandler()) {
 		std::cerr << "Failed to install signal handler" << std::endl;
 	}
 
-	PropertyReader pr("props.txt");
-	if (!pr.hasProp("modpass")) {
-		pr.setProp("modpass", gen_random_str(10));
-	}
-	if (!pr.hasProp("adminpass")) {
-		pr.setProp("adminpass", gen_random_str(10));
-	}
-	pr.writeToDisk();
+	s = std::make_unique<Server>(); // TODO: configurable baseDir
 
-	u16 port = std::stoul(pr.getProp("port", "13374"));
-	s = std::make_unique<Server>(
-		port,
-		pr.getProp("modpass"),
-		pr.getProp("adminpass"),
-		pr.getProp("worldfolder", "chunkdata")
-	);
-
-	std::string bind(pr.getProp("bindto"));
-	if (!s->listenAndRun(bind)) {
-		std::cerr << "Couldn't listen on " << bind << ":" << port << std::endl;
+	if (!s->listenAndRun()) {
+		std::cerr << "Couldn't listen on specified address!" << std::endl;
 		return 1;
 	}
 

@@ -10,10 +10,16 @@ PropertyReader::PropertyReader(const std::string path)
 	readFromDisk();
 }
 
+PropertyReader::PropertyReader(PropertyReader&& p)
+: filePath(std::move(p.filePath)),
+  propsChanged(p.propsChanged),
+  props(std::move(p.props)) {
+  	// prevent the moved class from saving to the file on destruction
+	p.propsChanged = false;
+}
+
 PropertyReader::~PropertyReader() {
-	if (propsChanged) {
-		writeToDisk();
-	}
+	writeToDisk();
 }
 
 /* Returns false if it couldn't open the file */
@@ -55,6 +61,10 @@ bool PropertyReader::writeToDisk(bool force) {
 	return ok;
 }
 
+bool PropertyReader::isEmpty() {
+	return props.empty();
+}
+
 bool PropertyReader::hasProp(std::string key) {
 	return props.find(key) != props.end();
 }
@@ -67,6 +77,14 @@ std::string PropertyReader::getProp(std::string key, std::string defval) {
 	return defval;
 }
 
+std::string PropertyReader::getOrSetProp(std::string key, std::string defval) {
+	if (!hasProp(key)) {
+		setProp(key, defval);
+		return defval;
+	}
+	return getProp(key);
+}
+
 void PropertyReader::setProp(std::string key, std::string value) {
 	if (!value.size()) {
 		props.erase(key);
@@ -74,4 +92,8 @@ void PropertyReader::setProp(std::string key, std::string value) {
 		props[key] = value;
 	}
 	propsChanged = true;
+}
+
+bool PropertyReader::delProp(std::string key) {
+	return props.erase(key);
 }

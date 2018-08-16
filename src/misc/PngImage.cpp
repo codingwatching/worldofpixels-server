@@ -283,4 +283,5 @@ void PngImage::writeFile(const std::string& f) {
 	}
 
 	encodePng(w, h, data.get(), pngWriteDataToFile, static_cast<void*>(&file), chunkWriters);
+	// XXX: throw if write failed
 }

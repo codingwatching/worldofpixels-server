@@ -2,58 +2,57 @@
 #include <keys.hpp>
 
 #include <misc/utils.hpp>
-#include <World.hpp>
 
 #include <nlohmann/json.hpp>
 
 #include <fstream>
 #include <iostream>
+#include <utility>
 
 constexpr auto asyncDeleter = [](uS::Async * a) {
 	a->close();
 };
 
-Server::Server(const u16 port, const std::string& modpw, const std::string& adminpw, const std::string& path)
-	: port(port),
-	  modpw(modpw),
-	  adminpw(adminpw),
-	  path(path + "/"),
-	  startupTime(js_date_now()),
-	  totalConnections(0),
-	  h(uWS::NO_DELAY, true, 2048),
-	  stopCaller(new uS::Async(h.getLoop()), asyncDeleter),
-	  cmds(this),
-	  connlimiter(10, 5),
-	  tc(h.getLoop()),
-	  hcli(h.getLoop()),
-	  maxconns(6),
-	  captcha_required(false),
-	  lockdown(false),
-	  proxy_lock(false),
-	  instaban(false),
-	  trusting_captcha(false),
-	  fastconnectaction(0) {
-	std::cout << "Admin password set to: " << adminpw << "." << std::endl;
-	std::cout << "Moderator password set to: " << modpw << "." << std::endl;
-	readfiles();
+Server::Server(std::string basePath)
+: h(uWS::NO_DELAY, true, 16384),
+  stopCaller(new uS::Async(h.getLoop()), asyncDeleter),
+  s(std::move(basePath)),
+  bm(s.getBansManager()),
+  tb(h.getLoop()),
+  tc(h.getLoop()),
+  hcli(h.getLoop()),
+  cmds(this),
+  startupTime(jsDateNow()),
+  totalConnections(0),
+  worldTickTimer(0),
+  saveTimer(0),
+  maxconns(6),
+  captcha_required(false),
+  lockdown(false),
+  proxy_lock(false),
+  instaban(false),
+  trusting_captcha(false),
+  fastconnectaction(0) {
+	std::cout << "Admin password set to: " << s.getAdminPass() << "." << std::endl;
+	std::cout << "Moderator password set to: " << s.getModPass() << "." << std::endl;
 
 	stopCaller->setData(this);
+	tb.setWorkerThreadSchedulingPriorityToLowestPossibleValueAllowedByTheOperatingSystem();
 
 	api.set("status", [this] (uWS::HttpResponse * res, auto args) {
 		std::string ip(res->getHttpSocket()->getAddress().address);
 
 		u8 yourConns = 0;
-		i64 banned = 0;
-		{ auto s = ipban.find(ip); if (s != ipban.end()) banned = s->second; }
+		bool banned = bm.isBanned(ip);
 		{ auto s = conns.find(ip); if (s != conns.end()) yourConns = s->second; }
 
 		nlohmann::json j = {
-			{ "motd", "just testing lol" },
+			{ "motd", "cool stuff" },
 			{ "totalConnections", totalConnections },
 			{ "captchaEnabled", captcha_required },
 			{ "maxConnectionsPerIp", maxconns },
 			{ "users", connsws.size() },
-			{ "uptime", js_date_now() - startupTime },
+			{ "uptime", jsDateNow() - startupTime },
 			{ "yourIp", ip },
 			{ "yourConns", yourConns },
 			{ "banned", banned }
@@ -77,26 +76,25 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 	});
 
 	api.set("view", [this] (uWS::HttpResponse * res, auto args) {
-		if (args.size() != 4) return ApiProcessor::INVALID_ARGS;
+		if (args.size() != 4 || !this->verifyWorldName(args[1])) return ApiProcessor::INVALID_ARGS;
+		// wtf, gcc?
+		auto world = this->getWorld(args[1], false);
+		if (world == worlds.end()) {
+			// nginx is supposed to serve unloaded worlds and chunks.
+			res->end("\"This world is not loaded!\"", 27);
+			return ApiProcessor::OK;
+		}
 
-		World * w = nullptr;
 		i32 x = 0;
 		i32 y = 0;
 
-		{ auto s = worlds.find(args[1]); if (s != worlds.end()) w = s->second.get(); }
 		try {
 			x = std::stoi(args[2]);
 			y = std::stoi(args[3]);
 		} catch(...) { return ApiProcessor::INVALID_ARGS; }
 
-		if (w) {
-			res->end();
-			//u32 len;
-			//auto png = compressPng(w->get_chunk(x, y)->get_data(), 16, 16, 3, len);
-			//res->end(reinterpret_cast<char *>(png.get()), len);
-		} else {
-			res->end();
-		}
+		// will encode the png in another thread and end the request when done
+		world->second.send_chunk(res, x, y);
 
 		return ApiProcessor::OK;
 	});
@@ -125,64 +123,42 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 		si->player = nullptr;
 		connsws.emplace(ws);
 		ws->setUserData(si);
-		i64 now = js_date_now();
-		bool whitelisted = ipwhitelist.find(si->ip) != ipwhitelist.end();
-		bool banned = false;
-		{
-			auto srch = ipban.find(si->ip);
-			if (srch != ipban.end()) {
-				banned = (now < srch->second || srch->second < 0);
-				if (!banned) {
-					clearexpbans();
-				} else if (srch->second > 0) {
-					std::string ms("Remaining time: " + std::to_string((srch->second - now) / 1000) + " seconds");
-					ws->send(ms.c_str(), ms.size(), uWS::TEXT);
-				}
-			}
-		}
+
+		bool banned = bm.isBanned(si->ip);
+
 		bool isskidbot = instaban && si->origin == "(None)";
-		bool blacklisted = ipblacklist.find(si->ip) != ipwhitelist.end();
-		si->captcha_verified = {captcha_required && !(whitelisted && trusting_captcha) ? CA_WAITING : CA_OK};
-		if ((lockdown && !whitelisted) || (banned)) {
+		si->captcha_verified = {captcha_required ? CA_WAITING : CA_OK};
+
+		if (lockdown || banned) {
 			if (!banned) {
 				std::string m("Sorry, the server is not accepting new connections right now.");
 				ws->send(m.c_str(), m.size(), uWS::TEXT);
 			} else {
+				auto info(bm.getInfoFor(si->ip));
 				std::string m("You are banned. Appeal on the OWOP discord server, (https://discord.io/owop)");
+				m += "\nReason: " + info.reason;
+				m += "\nTime remaining: " + std::to_string(jsDateNow() - info.expiresOn / 1000) + " seconds.";
 				ws->send(m.c_str(), m.size(), uWS::TEXT);
 			}
 			ws->close();
 			return;
 		}
-		if (isskidbot && !banned) {
-			ipban.emplace(si->ip, now + 120 * 1000);
+
+		if (isskidbot) {
+			bm.ban(si->ip, 0, "Normal Shutdown, Thank you for playing");
 			admintell("DEVBanned IP (skid detected): " + si->ip);
-			banned = true;
-			ws->close();
-			return;
-		}
-		auto search = conns.find(si->ip);
-		if (search == conns.end()) {
-			conns[si->ip] = 1;
-		} else if (++search->second > maxconns || blacklisted) {
-			std::string m("Sorry, but you have reached the maximum number of simultaneous connections, (" + std::to_string(blacklisted ? 1 : maxconns) + ").");
-			ws->send(m.c_str(), m.size(), uWS::TEXT);
 			ws->close();
 			return;
 		}
 
-		if (!connlimiter.can_spend()) {
-			switch (fastconnectaction) {
-				case 3:
-					si->captcha_verified = CA_WAITING;
-					break;
-				case 2:
-					ipban.emplace(si->ip, -1);
-					admintell("DEVBanned IP (by fc): " + si->ip, true);
-				case 1:
-					ws->close();
-					break;
-			}
+		auto search = conns.find(si->ip);
+		if (search == conns.end()) {
+			conns[si->ip] = 1;
+		} else if (++search->second > maxconns) {
+			std::string m("Sorry, but you have reached the maximum number of simultaneous connections, (" + std::to_string(maxconns) + ").");
+			ws->send(m.c_str(), m.size(), uWS::TEXT);
+			ws->close();
+			return;
 		}
 
 		u8 captcha_request[2] = {CAPTCHA_REQUIRED, si->captcha_verified};
@@ -255,7 +231,7 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 		}*/
 	});
 
-	h.onMessage([this, adminpw](uWS::WebSocket<uWS::SERVER> * ws, const char * msg, sz_t len, uWS::OpCode oc) {
+	h.onMessage([this](uWS::WebSocket<uWS::SERVER> * ws, const char * msg, sz_t len, uWS::OpCode oc) {
 		SocketInfo * const si = ((SocketInfo *)ws->getUserData());
 		Client * const player = si->player;
 		if (si->captcha_verified == CA_WAITING && oc == uWS::TEXT && len > 7 && std::string(msg, 7) == "CaptchA" && len < 2048) {
@@ -311,7 +287,6 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 						ws->close();
 					} else {
 						std::cout << "Captcha verified for IP: " << si->ip << std::endl;
-						whitelistip(si->ip);
 					}
 				}
 			});
@@ -324,10 +299,10 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 					}
 				} break;
 
-				case 8: {
+				/*case 8: {
 					chunkpos_t pos = *((chunkpos_t *)msg);
 					player->get_chunk(pos.x, pos.y);
-				} break;
+				} break;*/
 
 				case 10: {
 					if(player->get_rank() < Client::MODERATOR){
@@ -336,7 +311,7 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 						break;
 					}
 					chunkpos_t pos = *((chunkpos_t *)msg);
-					player->get_world()->setChunkProtection(pos.x, pos.y, (bool) msg[sizeof(chunkpos_t)]);
+					player->get_world().setChunkProtection(pos.x, pos.y, (bool) msg[sizeof(chunkpos_t)]);
 				} break;
 
 				case 11: {
@@ -370,17 +345,18 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 						break;
 					}
 					chunkpos_t pos = *((chunkpos_t *)msg);
-					player->get_world()->paste_chunk(pos.x, pos.y, msg + sizeof(chunkpos_t));
+					player->get_world().paste_chunk(pos.x, pos.y, msg + sizeof(chunkpos_t));
 				} break;
 			};
 		} else if(player && oc == uWS::TEXT && len > 1 && msg[len-1] == '\12'){
 			std::string mstr(msg, len - 1);
-			if((player->is_admin() && getUTF8strlen(mstr) <= 16384) || (player->is_mod() && getUTF8strlen(mstr) <= 512) || (player->can_chat() && getUTF8strlen(mstr) <= 128)){
+			if((player->is_admin() && getUtf8StrLen(mstr) <= 16384) || (player->is_mod() && getUtf8StrLen(mstr) <= 512) || (player->can_chat() && getUtf8StrLen(mstr) <= 128)){
 				player->updated();
 				if(msg[0] != '/'){
 					player->chat(mstr);
 				} else {
-					cmds.exec(player, std::string(msg + 1, len - 2));
+					player->tell("Commands unavailable atm.");
+					//cmds.exec(player, std::string(msg + 1, len - 2));
 				}
 			} else {
 				player->warn();
@@ -394,16 +370,12 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 	});
 
 	h.onDisconnection([this](uWS::WebSocket<uWS::SERVER> * ws, int c, const char * msg, sz_t len) {
-		bool lock_check = false;
 		SocketInfo * const si = static_cast<SocketInfo *>(ws->getUserData());
 		if (si->player) {
-			World * const w = si->player->get_world();
-			if (si->player->is_admin() && lockdown) {
-				lock_check = true;
-			}
+			World& w = si->player->get_world();
 			delete si->player;
-			if (w->is_empty()) {
-				worlds.erase(w->name);
+			if (w.is_empty()) {
+				worlds.erase(w.getWorldName());
 			}
 		}
 		auto search = conns.find(si->ip);
@@ -414,42 +386,32 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 		}
 		connsws.erase(ws);
 		delete si;
-		if (lock_check) {
-			lockdown_check();
-		}
 	});
-}
-
-Server::~Server() {
-	for (auto it = connsws.begin(); it != connsws.end();) {
-		auto client = *it++;
-		client->terminate();
-	}
-	writefiles();
 }
 
 void Server::broadcastmsg(const std::string& msg) {
 	h.getDefaultGroup<uWS::SERVER>().broadcast(msg.c_str(), msg.size(), uWS::TEXT);
 }
 
-bool Server::listenAndRun(const std::string listenOn) {
-    const char * host = listenOn.size() > 0 ? listenOn.c_str() : nullptr;
+bool Server::listenAndRun() {
+	std::string addr(s.getBindAddress());
+	u16 port = s.getBindPort();
 
-    if (!h.listen(host, port, nullptr, uS::ListenOptions::ONLY_IPV4)) {
-	    return false;
+	const char * host = addr.size() > 0 ? addr.c_str() : nullptr;
+
+	if (!h.listen(host, port, nullptr, uS::ListenOptions::ONLY_IPV4)) {
+		return false;
 	}
 
-	makedir(path);
-
 	worldTickTimer = tc.startTimer([this] {
-	    tickWorlds();
-	    return true;
+		tickWorlds();
+		return true;
 	}, 60);
 
 	saveTimer = tc.startTimer([this] {
 		kickInactivePlayers();
-	    save_now();
-	    return true;
+		save_now();
+		return true;
 	}, 900000);
 
 	stopCaller->start(Server::doStop);
@@ -459,54 +421,70 @@ bool Server::listenAndRun(const std::string listenOn) {
 }
 
 void Server::save_now() {
-	for(const auto& world : worlds){
-		world.second->save();
+	for (auto& world : worlds) {
+		world.second.save();
 	}
-	writefiles();
+	
 	std::cout << "Worlds saved." << std::endl;
 	admintell("DEVWorlds saved.");
 }
 
 void Server::tickWorlds() {
-    for (const auto & w : worlds) {
-        w.second->send_updates();
+    for (auto & w : worlds) {
+        w.second.send_updates();
     }
 }
 
-void Server::join_world(uWS::WebSocket<uWS::SERVER> * ws, const std::string& worldname) {
+bool Server::verifyWorldName(const std::string& s) {
 	/* Validate world name, allowed chars are a..z, 0..9, '_' and '.' */
-	for(sz_t i = worldname.size(); i--;){
-		if(!((worldname[i] > 96 && worldname[i] < 123) ||
-		     (worldname[i] > 47 && worldname[i] < 58) ||
-		      worldname[i] == 95 || worldname[i] == 46)){
-			ws->close();
-			return;
+	if (s.size() > 24 || s.size() < 1) {
+		return false;
+	}
+
+	for (char c : s) {
+		if (!((c >  96 && c < 123) ||
+		      (c >  47 && c <  58) ||
+		       c == 95 || c == 46)) {
+			return false;
 		}
 	}
+	return true;
+}
 
-	auto search = worlds.find(worldname);
+const std::map<std::string, World>::iterator Server::getWorld(std::string name, bool create) {
+	auto search = worlds.find(name);
 
-	World * w = nullptr;
-
-	if (search == worlds.end()) {
-		auto p = std::make_unique<World>(path, worldname);
-		w = p.get();
-		worlds[worldname] = std::move(p);
-	} else {
-		w = search->second.get();
+	if (search == worlds.end() && create) {
+		// construct the world without extra copies
+		// this uglyness is fixed on c++17, but for now this works
+		search = worlds.emplace(std::piecewise_construct,
+			std::forward_as_tuple(name),
+			std::forward_as_tuple(s.getWorldStorageFor(name), tb)).first;
 	}
 
+	return search;
+}
+
+void Server::join_world(uWS::WebSocket<uWS::SERVER> * ws, const std::string& worldName) {
+	if (!verifyWorldName(worldName)) {
+		ws->close();
+		return;
+	}
+
+	auto world = getWorld(worldName);
+
 	SocketInfo * si = static_cast<SocketInfo *>(ws->getUserData());
-	Client * const cl = si->player = new Client(w->get_id(), ws, w, si);
-	w->add_cli(cl);
+	si->player = new Client(ws, world->second, si);
+
+	world->second.add_cli(si->player);
 }
 
 bool Server::is_adminpw(const std::string& pw) {
-	return pw == adminpw;
+	return pw == s.getAdminPass();
 }
 
 bool Server::is_modpw(const std::string& pw) {
-	return pw == modpw;
+	return pw == s.getAdminPass();
 }
 
 u32 Server::get_conns(const std::string& ip) {
@@ -527,7 +505,7 @@ void Server::admintell(const std::string & msg, bool modsToo) {
 }
 
 void Server::kickInactivePlayers() {
-	i64 now = js_date_now();
+	i64 now = jsDateNow();
 	for (auto it = connsws.begin(); it != connsws.end();) {
 		if (Client * c = static_cast<SocketInfo *>((*it++)->getUserData())->player) {
 			if (now - c->get_last_move() > 1200000 && !c->is_admin()) {
@@ -537,11 +515,11 @@ void Server::kickInactivePlayers() {
 	}
 }
 
-void Server::kickall(World * const wrld) {
+void Server::kickall(World& wrld) {
 	for (auto it = connsws.begin(); it != connsws.end();) {
 		auto client = *it++;
 		SocketInfo const * const si = (SocketInfo *)client->getUserData();
-		if (si->player && si->player->get_world() == wrld && !si->player->is_admin()) {
+		if (si->player && si->player->get_world().getWorldName() == wrld.getWorldName() && !si->player->is_admin()) {
 			si->player->disconnect();
 		}
 	}
@@ -574,45 +552,6 @@ bool Server::kickip(const std::string & ip) {
 		conns.erase(ip);
 	}
 	return !useless;
-}
-
-void Server::clearexpbans() {
-	i64 now = js_date_now();
-	for (auto it = ipban.begin(); it != ipban.end();) {
-		auto ban = *it++;
-		if (now >= ban.second && ban.second > 0) {
-			admintell("DEVBan expired for: " + ban.first, true);
-			ipban.erase(ban.first);
-		}
-	}
-}
-
-void Server::banip(const std::string & ip, i64 until) {
-	if (ipban.emplace(ip, until).second) {
-		admintell("DEVBanned IP: " + ip + ", until T" + std::to_string(until), true);
-		auto search = conns.find(ip);
-		if (search != conns.end()) {
-			kickip(ip);
-		}
-	}
-}
-
-std::unordered_map<std::string, i64> * Server::getbans() {
-	return &ipban;
-}
-
-std::unordered_set<std::string> * Server::getwhitelist() {
-	return &ipwhitelist;
-}
-
-std::unordered_set<std::string> * Server::getblacklist() {
-	return &ipblacklist;
-}
-
-void Server::whitelistip(const std::string & ip) {
-	if (ipwhitelist.emplace(ip).second) {
-		admintell("DEVWhitelisted IP: " + ip);
-	}
 }
 
 void Server::set_max_ip_conns(u8 max) {
@@ -650,24 +589,15 @@ void Server::set_captcha_protection(bool state) {
 }
 
 void Server::lockdown_check() {
-	for (auto & ip : ipwhitelist) {
-		auto search = conns.find(ip);
-		if (search != conns.end() && search->second > 0) {
-			return;
-		}
+	// XXX: possible trap
+	if (connsws.size() == 0) {
+		set_lockdown(false);
 	}
-	set_lockdown(false);
 }
 
 void Server::set_lockdown(bool state) {
 	lockdown = state;
 	if (lockdown) {
-		for (auto client : connsws) {
-			SocketInfo const * const si = (SocketInfo *)client->getUserData();
-			if (si->player && si->player->is_admin()) {
-				ipwhitelist.emplace(si->ip);
-			}
-		}
 		admintell("DEVLockdown mode enabled.", true);
 	} else {
 		//ipwhitelist.clear();
@@ -696,89 +626,8 @@ void Server::set_instaban(bool state) {
 	}
 }
 
-void Server::set_proxycheck(bool state) {
-	proxy_lock = state;
-	if (!proxy_lock) {
-		/* Removes all pending requests with this url */
-		//hcli.removeRequests("http://check.getipintel.net/check.php");
-		for (auto & ip : proxyquery_checking) {
-			/* Kick these IPs because we're not sure if they are proxies or not */
-			kickip(ip);
-		}
-		proxyquery_checking.clear();
-		admintell("DEVProxy check disabled.", true);
-	} else {
-		admintell("DEVProxy check enabled.", true);
-	}
-}
-
 bool Server::is_connected(uWS::WebSocket<uWS::SERVER> * ws) {
 	return connsws.find(ws) != connsws.end();
-}
-
-void Server::writefiles() {
-	std::ofstream file("bans.txt", std::ios_base::trunc);
-	for (auto & ip : ipban) {
-		file << ip.first << " " << ip.second << std::endl;
-	}
-	file.flush();
-	file.close();
-	file.open("whitelist.txt", std::ios_base::trunc);
-	for (auto & ip : ipwhitelist) {
-		file << ip << std::endl;
-	}
-	file.flush();
-	file.close();
-	file.open("blacklist.txt", std::ios_base::trunc);
-	for (auto & ip : ipblacklist) {
-		file << ip << std::endl;
-	}
-	file.flush();
-	file.close();
-}
-
-void Server::readfiles() {
-	std::string ip;
-
-
-	std::ifstream file("bans.txt");
-	while (file.good()) {
-		std::getline(file, ip);
-		if (ip.size() > 0) {
-			sz_t keylen = ip.find_first_of(' ');
-			if (keylen != std::string::npos) {
-				try {
-					ipban[ip.substr(0, keylen)] = std::stol(ip.substr(keylen + 1));
-				} catch (std::invalid_argument & e) { }
-				  catch (std::out_of_range & e) { }
-			} else {
-				ipban[ip] = -1;
-			}
-		}
-		ip.clear();
-	}
-	file.close();
-	std::cout << ipban.size() << " bans read." << std::endl;
-	file.open("whitelist.txt");
-	while (file.good()) {
-		std::getline(file, ip);
-		if (ip.size() > 0) {
-			ipwhitelist.emplace(ip);
-		}
-		ip.clear();
-	}
-	file.close();
-	std::cout << ipwhitelist.size() << " whitelists read." << std::endl;
-	file.open("blacklist.txt");
-	while (file.good()) {
-		std::getline(file, ip);
-		if (ip.size() > 0) {
-			ipblacklist.emplace(ip);
-		}
-		ip.clear();
-	}
-	file.close();
-	std::cout << ipblacklist.size() << " blacklists read." << std::endl;
 }
 
 void Server::unsafeStop() {
@@ -786,6 +635,7 @@ void Server::unsafeStop() {
 		h.getDefaultGroup<uWS::SERVER>().close(1001);
 		stopCaller = nullptr;
 		tc.clearTimers();
+		tb.prepareForDestruction();
 	}
 }
 

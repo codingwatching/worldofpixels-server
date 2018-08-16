@@ -1,236 +1,197 @@
-#include "Database.hpp"
+#include "Storage.hpp"
 
 #include <iostream>
 #include <algorithm>
-
-#include <unistd.h>
-#include <cstring>
+#include <stdexcept>
+#include <memory>
+#include <fstream>
 
 #include <misc/utils.hpp>
 #include <config.hpp>
 
-union twoi32tou64_u {
-		struct {
-			i32 x;
-			i32 y;
-		} p;
-		u64 pos;
-};
+WorldStorage::WorldStorage(std::string worldDir, std::string worldName)
+: PropertyReader(worldDir + "/props.cfg"),
+  worldDir(std::move(worldDir)),
+  worldName(std::move(worldName)) { }
 
-u64 key(i32 x, i32 y) {
-	twoi32tou64_u s;
-	s.p.x = x;
-	s.p.y = y;
-	return s.pos;
-};
-
-Database::Database(const std::string& dir)
-: dir(dir),
-  created_dir(fileExists(dir)),
-  pr(dir + "props.txt"),
-  changedProtects(false) {
-	if (created_dir) {
-		std::ifstream file(dir + "pchunks.bin", std::ios::binary);
-		if(file.good()){
-			file.seekg(0, std::fstream::end);
-			const sz_t size = file.tellg();
-			if (size % 8) {
-				std::cerr << "Protection file corrupted, at: " << dir << ", ignoring." << std::endl;
-			} else {
-				const sz_t itemsonfile = size / 8;
-				u64 * rankedarr = new u64[itemsonfile];
-				file.seekg(0);
-				file.read((char*)rankedarr, size);
-				for (sz_t i = 0; i < itemsonfile; i++) {
-					rankedChunks.emplace(rankedarr[i]);
-				}
-				delete[] rankedarr;
-			}
-		}
-		file.close();
-	}
+const std::string& WorldStorage::getWorldName() const {
+	return worldName;
 }
 
-Database::~Database() {
-	for(const auto& hdl : handles){
-		delete hdl.second;
-	}
-	handles.clear();
-	save();
+const std::string& WorldStorage::getWorldDir() const {
+	return worldDir;
 }
 
-void Database::save() {
-    pr.writeToDisk();
-	if (!changedProtects) return;
-	changedProtects = false;
+std::string WorldStorage::getChunkFilePath(i32 x, i32 y) const {
+	return worldDir + "/r." + std::to_string(x) + "." + std::to_string(y) + ".png";
+}
 
-	if (rankedChunks.size() > 0) {
-		std::ofstream file(dir + "pchunks.bin", std::ios_base::binary | std::ios_base::trunc);
+void WorldStorage::save() {
+	writeToDisk();
+}
 
-		if (file.good()) {
-			u64 * rankarr = new u64[rankedChunks.size()];
-			sz_t filesize = 0;
-			for (u64 pos : rankedChunks) {
-				rankarr[filesize++] = pos;
-			}
-			file.write((char*)rankarr, filesize * sizeof(u64));
-			delete[] rankarr;
-		}
-		file.close();
+bool WorldStorage::hasMotd() {
+	return hasProp("motd");
+}
+
+bool WorldStorage::hasPassword() {
+	return hasProp("password");
+}
+
+u16 WorldStorage::getPixelRate() {
+	u16 rate = 32;
+	if (hasProp("paintrate")) try {
+		u32 value = stoul(getProp("paintrate"));
+		rate = value > u16(-1) ? u16(-1) : value; // XXX: what if it's 0?
+	} catch(const std::exception& e) {
+		std::cerr << "Invalid pixel paint rate specified in world cfg" << worldName << ", resetting. (" << e.what() << ")" << std::endl;
+		delProp("paintrate");
+	}
+	return rate;
+}
+
+RGB WorldStorage::getBackgroundColor() {
+	RGB clr = {255, 255, 255};
+	if (hasProp("bgcolor")) try {
+		clr.rgb = stoul(getProp("bgcolor"));
+		// switch bytes around so they're read in the correct HTML color order
+		//clr.rgb = (clr.rgb & 0xFF) << 16 | (clr.rgb & 0xFF00) | (clr.rgb & 0xFF0000) >> 16;
+	} catch(const std::exception& e) {
+		std::cerr << "Invalid color specified in world cfg" << worldName << ", resetting. (" << e.what() << ")" << std::endl;
+		delProp("bgcolor");
+	}
+	return clr;
+}
+
+std::string WorldStorage::getMotd() {
+	return getProp("motd");
+}
+
+std::string WorldStorage::getPassword() {
+	return getProp("password");
+}
+
+bool WorldStorage::getGlobalModeratorsAllowed() {
+	return getProp("disablemods", "false") != "true";
+}
+
+void WorldStorage::setPixelRate(u16 v) {
+	setProp("paintrate", std::to_string(v));
+}
+
+void WorldStorage::setBackgroundColor(RGB clr) {
+	setProp("bgcolor", std::to_string(clr.rgb));
+}
+
+void WorldStorage::setMotd(std::string s) {
+	setProp("motd", std::move(s));
+}
+
+void WorldStorage::setPassword(std::string s) {
+	setProp("password", std::move(s));
+}
+
+void WorldStorage::setGlobalModeratorsAllowed(bool b) {
+	if (!b) {
+		setProp("disablemods", "true");
 	} else {
-		std::remove((dir + "pchunks.bin").c_str());
+		delProp("disablemods");
 	}
 }
 
-void Database::setChunkProtection(i32 x, i32 y, bool state) {
-	union {
-		struct {
-			i32 x;
-			i32 y;
-		} p;
-		u64 pos;
-	} s;
-	s.p.x = x;
-	s.p.y = y;
-	//u64 p = (*(u64 *)&x) << 32 | (*(u64 *)&y);
-	if (state) {
-		rankedChunks.emplace(s.pos);
-	} else {
-		rankedChunks.erase(s.pos);
-	}
-	changedProtects = true;
-}
-
-bool Database::getChunkProtection(i32 x, i32 y) {
-	//u64 p = (*(u64 *)&x) << 32 | (*(u64 *)&y);
-	union {
-		struct {
-			i32 x;
-			i32 y;
-		} p;
-		u64 pos;
-	} s;
-	s.p.x = x;
-	s.p.y = y;
-	return rankedChunks.find(s.pos) != rankedChunks.end();
-}
-
-std::string Database::getProp(std::string key, std::string defval) {
-	return pr.getProp(key, defval);
-}
-
-void Database::setProp(std::string key, std::string value) {
-	pr.setProp(key, value);
-}
-
-std::fstream * Database::get_handle(const i32 x, const i32 y, const bool create) {
-	if(!created_dir && create){
-		created_dir = makedir(dir);
-		if(!created_dir){
-			std::cerr << "Could not create directory! (" << strerror(errno) << ")" << std::endl;
-			return nullptr;
-		}
-	}
-	const i32 rx = x >> 5;
-	const i32 ry = y >> 5;
-	const u64 mkey(key(rx, ry));
-	const auto nsearch = nonexistant.find(mkey);
-	if(nsearch != nonexistant.end() && !create){
-		return nullptr;
-	} else if(create){
-		nonexistant.erase(mkey);
-	}
-	const auto search = handles.find(mkey);
-	std::fstream * handle = nullptr;
-	if(search == handles.end()){
-		const std::string path(dir + "r." + std::to_string(rx) + "." + std::to_string(ry) + ".pxr");
-		if(fileExists(path)){
-			handle = new std::fstream(path, std::fstream::in | std::fstream::out | std::fstream::binary);
-			/* std::cout << "Read file: '" << path << "'" << std::endl; */
-		} else if(create){
-			handle = new std::fstream(path, std::fstream::in | std::fstream::out | std::fstream::binary | std::fstream::trunc);
-			if(handle && handle->good()){
-				u8 zero[3072]; /* There must be a better way of doing this */
-				std::fill_n(zero, sizeof(zero), (u8)0);
-				handle->write((char *)&zero, sizeof(zero));
-				/* std::cout << "Made file: '" << path << "'" << std::endl; */
-			}
+void WorldStorage::convertProtectionData(std::function<void(i32, i32)> f) {
+	std::ifstream file(worldDir + "/pchunks.bin", std::ios::binary | std::ios::ate);
+	if (file) {
+		const sz_t size = file.tellg();
+		if (size % 8) { // not multiple of 8?
+			std::cerr << "Protection file corrupted, at: "
+				<< worldDir << ", ignoring." << std::endl;
 		} else {
-			/* We tried reading, didn't find the file, don't try to read it again. */
-			if(nonexistant.size() >= 512){
-				nonexistant.clear();
+			const sz_t itemsonfile = size / 8;
+			auto rankedarr(std::make_unique<u64[]>(itemsonfile));
+			file.seekg(0);
+			file.read((char*)rankedarr.get(), size);
+			for (sz_t i = 0; i < itemsonfile; i++) {
+				union {
+					struct {
+						i32 x;
+						i32 y;
+					} p;
+					u64 pos;
+				} s;
+				s.pos = rankedarr[i];
+				f(s.p.x, s.p.y);
 			}
-			nonexistant.emplace(mkey);
-		}
-		if(handle && handle->good()){
-			if(handles.size() > WORLD_MAX_FILE_HANDLES){
-				auto it = handles.begin();
-				/* ugly, get first element inserted */
-				for(auto it2 = handles.begin(); ++it2 != handles.end(); ++it);
-				/* look at the inline key func for explanation */
-				/*std::cout << "Closed file handle to: '" << dir << "r."
-					<< *((i32 *)it->first.c_str()) << "."
-					<< *((i32 *)(it->first.c_str() + sizeof(i32))) << ".pxr'" << std::endl;*/
-				delete it->second;
-				handles.erase(it);
-			}
-			handles[mkey] = handle;
-		} else if(handle) {
-			std::cerr << "Could not create/read file in '" << path << "'! (" << strerror(errno) << ")" << std::endl;
-			delete handle;
-			handle = nullptr;
-		}
-	} else {
-		handle = search->second;
-		if(handle && !handle->good()){
-			std::cerr << "A file handle has gone bad: '" << dir << "/r." << rx << "." << ry << ".pxr'" << std::endl;
-			delete handle;
-			handles.erase(search);
-			/* oh boy, not sure if this will fix anything */
-			handle = get_handle(x, y, create);
 		}
 	}
-	return handle;
 }
 
-bool Database::get_chunk(const i32 x, const i32 y, char * const arr) {
-	std::fstream * const file = get_handle(x, y, false);
-	if(!file || !file->good()){
-		return false;
+Storage::Storage(std::string bPath)
+: PropertyReader(bPath + "/props.cfg"),
+  basePath(std::move(bPath)),
+  worldsDir(getOrSetProp("worldfolder", "world_data")),
+  worldDirPath(basePath + "/" + worldsDir),
+  bm(basePath + "/bans.json") {
+	if (!fileExists(basePath) && !makeDir(basePath)) {
+		throw std::runtime_error("Couldn't access/create directory: " + basePath);
 	}
-	file->seekg(0, std::fstream::end);
-	const sz_t size = file->tellg();
-	const u32 lookup = 3 * ((x & 31) + (y & 31) * 32);
-	file->seekg(lookup);
-	u32 chunkpos = 0;
-	file->read(((char *)&chunkpos) + 1, 3);
-	if(chunkpos == 0 || size < 3072 || size - chunkpos < 768){
-		return false;
+
+	if (!fileExists(worldDirPath) && !makeDir(worldDirPath)) {
+		throw std::runtime_error("Couldn't access/create world directory: " + worldDirPath);
 	}
-	file->seekg(chunkpos);
-	file->read(arr, 768);
-	return true;
 }
 
-void Database::set_chunk(const i32 x, const i32 y, const char * const arr) {
-	std::fstream * const file = get_handle(x, y, true);
-	if(!file || !file->good()){
-		std::cerr << "Could not save chunk X: " << x << ",  Y: " << y << std::endl;
-		return;
+std::string Storage::getRandomPassword() {
+	return randomStr(10);
+}
+
+std::string Storage::getModPass() {
+	return getOrSetProp("modpass", getRandomPassword());
+}
+
+std::string Storage::getAdminPass() {
+	return getOrSetProp("adminpass", getRandomPassword());
+}
+
+std::string Storage::getBindAddress() {
+	return getOrSetProp("bindto", "0.0.0.0");
+}
+
+u16 Storage::getBindPort() {
+	u16 port = 13374;
+	try {
+		u32 z = std::stoul(getOrSetProp("port", "13374"));
+		if (z > u16(-1)) {
+			throw std::out_of_range("Out of uint16 range");
+		}
+		port = z & 0xFFFF;
+	} catch(const std::exception& e) {
+		std::cerr << "Invalid port in server cfg (" << e.what() << ")" << std::endl;
+		setProp("port", "13374");
 	}
-	file->seekg(0, std::fstream::end);
-	const sz_t size = file->tellg();
-	const u32 lookup = 3 * ((x & 31) + (y & 31) * 32);
-	file->seekg(lookup);
-	u32 chunkpos = 0;
-	file->read(((char *)&chunkpos) + 1, 3);
-	/* TODO: check for corruption */
-	if(chunkpos == 0){
-		file->seekp(lookup);
-		file->write(((char *)&size) + 1, 3);
-		chunkpos = size;
-	}
-	file->seekp(chunkpos);
-	file->write(arr, 768);
-	file->flush();
+	return port;
+}
+
+void Storage::setModPass(std::string s) {
+	setProp("modpass", std::move(s));
+}
+
+void Storage::setAdminPass(std::string s) {
+	setProp("adminpass", std::move(s));
+}
+
+void Storage::setBindAddress(std::string s) {
+	setProp("bindto", std::move(s));
+}
+
+void Storage::setBindPort(u16 p) {
+	setProp("port", std::to_string(p));
+}
+
+BansManager& Storage::getBansManager() {
+	return bm;
+}
+
+WorldStorage Storage::getWorldStorageFor(std::string worldName) {
+	return WorldStorage(worldDirPath + "/" + worldName, std::move(worldName));
 }

@@ -1,29 +1,50 @@
 #pragma once
 
-#include <uWS.h>
+#include <array>
+#include <vector>
 
-#include <misc/color.hpp>
 #include <misc/explints.hpp>
+#include <misc/color.hpp>
 #include <misc/PngImage.hpp>
-#include <types.hpp>
+
+class WorldStorage;
 
 class Chunk {
-	//const RGB bg;
+	i64 lastAction;
 	const i32 x;
 	const i32 y;
-	WorldStorage& ws;
+	const WorldStorage& ws;
 	PngImage data;
-	u32 protectionData[16 * 16]; // split one chunk to 16x16 protections
-	// with specific GIDs
+	std::array<u32, 16 * 16> protectionData; // split one chunk to 16x16 protections
+	// with specific GIDs, or GGIDs (grouped groups IDs)
 	std::vector<u8> pngCache; // could get big
+	bool canUnload;
 	bool pngCacheOutdated;
 	bool pngFileOutdated;
+	bool moved;
 
 public:
-	Chunk(i32 x, i32 y, RGB bg);
+	Chunk(i32 x, i32 y, const WorldStorage& ws);
+	Chunk(Chunk&&);
 	~Chunk();
 
 	bool setPixel(u16 x, u16 y, RGB);
-	const std::vector<u8>& getPngData();
+
+	void setProtectionGid(u8 x, u8 y, u32 gid);
+	u32 getProtectionGid(u8 x, u8 y) const;
+
+	bool isPngCacheOutdated() const;
+	void unsetPngOutdatedFlag();
+	void updatePngCache();
+	const std::vector<u8>& getPngData() const;
+
 	void save();
+
+	i64 getLastActionTime() const;
+	bool shouldUnload(bool) const;
+	void preventUnloading(bool);
+
+private:
+	void lockChunk();
+	void unlockChunk();
 };

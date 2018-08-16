@@ -8,7 +8,6 @@
 #include <misc/Bucket.hpp>
 #include <types.hpp>
 
-class Bucket;
 class World;
 
 class Client {
@@ -20,33 +19,29 @@ public:
 		ADMIN = 3
 	};
 private:
+	u32 id;
 	std::string nick;
-	Bucket dellimit;
 	Bucket pixupdlimit;
 	Bucket chatlimit;
 	i64 lastMovement;
 	uWS::WebSocket<uWS::SERVER> * ws;
-	World * const wrld;
+	World& wrld;
 	u16 penalty;
-	bool handledelete;
 	u8 rank;
 	bool stealthadmin;
 	bool suspicious;
-	bool compressionEnabled;
 	pinfo_t pos;
 	RGB lastclr;
 
 public:
-	const u32 id;
 	SocketInfo * si;
 	bool mute;
 
-	Client(const u32 id, uWS::WebSocket<uWS::SERVER> *, World * const, SocketInfo * si);
+	Client(uWS::WebSocket<uWS::SERVER> *, World&, SocketInfo * si);
 	~Client();
 
 	bool can_edit();
 
-	void get_chunk(const i32 x, const i32 y) const;
 	void put_px(const i32 x, const i32 y, const RGB);
 	void del_chunk(const i32 x, const i32 y, const RGB);
 
@@ -70,12 +65,14 @@ public:
 	bool is_admin() const;
 	uWS::WebSocket<uWS::SERVER> * get_ws() const;
 	std::string get_nick() const;
-	World * get_world() const;
+	World& get_world() const;
 	u16 get_penalty() const;
 	u8 get_rank() const;
 	i64 get_last_move() const;
+	u32 get_id() const;
 
 	void set_stealth(bool);
 	void set_nick(const std::string&);
 	void set_pbucket(u16 rate, u16 per);
+	void set_id(u32);
 };

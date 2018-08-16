@@ -5,8 +5,9 @@
 
 #include <misc/explints.hpp>
 
-sz_t getUTF8strlen(const std::string&);
-bool makedir(const std::string&);
+sz_t getUtf8StrLen(const std::string&);
+bool makeDir(const std::string&);
 bool fileExists(const std::string&);
-i64 js_date_now();
+i64 jsDateNow();
 std::vector<std::string> tokenize(const std::string&, char delimiter = ' ', bool trimEmpty = false);
+std::string randomStr(sz_t size);

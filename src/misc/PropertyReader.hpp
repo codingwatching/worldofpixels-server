@@ -9,12 +9,20 @@ class PropertyReader {
 
 public:
 	PropertyReader(const std::string filePath);
+
+	PropertyReader(PropertyReader&&);
+	PropertyReader(const PropertyReader&) = delete;
+	PropertyReader& operator=(const PropertyReader&) = delete;
+
 	~PropertyReader();
-	
+
 	bool readFromDisk();
 	bool writeToDisk(bool force = false);
 
-	bool hasProp(const std::string key);
-	std::string getProp(const std::string key, const std::string defval = "");
-	void setProp(const std::string key, const std::string value);
+	bool isEmpty();
+	bool hasProp(std::string key);
+	std::string getProp(std::string key, std::string defval = "");
+	std::string getOrSetProp(std::string key, std::string defval);
+	void setProp(std::string key, std::string value);
+	bool delProp(std::string key);
 };
