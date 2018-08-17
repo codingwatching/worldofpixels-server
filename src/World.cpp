@@ -273,6 +273,7 @@ void World::send_chunk(uWS::HttpResponse * res, i32 x, i32 y) {
 
 			ongoingChunkRequests.erase(search);
 			c.preventUnloading(false);
+			c.unsetCacheOutdatedFlag();
 			tryUnload();
 		};
 
@@ -334,8 +335,8 @@ void World::setChunkProtection(i32 x, i32 y, bool state) {
 		return;
 	}
 
-	// x and y are already divided by 16
-	chunk->second.setProtectionGid(x & 0xF, y & 0xF, state ? 1 : 0);
+	// x and y are 16x16 aligned
+	chunk->second.setProtectionGid(x & 0x1F, y & 0x1F, state ? 1 : 0);
 
 	if (clients.size() != 0) {
 		u8 msg[10] = {CHUNK_PROTECTED};

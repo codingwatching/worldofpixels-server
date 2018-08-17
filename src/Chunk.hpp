@@ -18,7 +18,7 @@ class Chunk {
 	const i32 y;
 	const WorldStorage& ws;
 	PngImage data;
-	std::array<u32, 16 * 16> protectionData; // split one chunk to 16x16 protections
+	std::array<u32, 32 * 32> protectionData; // split one chunk to 32x32 protections
 	// with specific GIDs, or GGIDs (grouped groups IDs)
 	std::vector<u8> pngCache; // could get big
 	bool canUnload;
@@ -37,7 +37,7 @@ public:
 	u32 getProtectionGid(u8 x, u8 y) const;
 
 	bool isPngCacheOutdated() const;
-	void unsetPngOutdatedFlag();
+	void unsetCacheOutdatedFlag();
 	void updatePngCache();
 	const std::vector<u8>& getPngData() const;
 

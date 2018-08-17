@@ -27,6 +27,7 @@ Chunk::Chunk(i32 x, i32 y, const WorldStorage& ws)
 
 	data.setChunkReader("woPp", [this, fail, &readerCalled] (u8 * d, sz_t size) {
 		readerCalled = true;
+		std::cout << "reader called" << std::endl;
 		try {
 			if (rle::getItems<u32>(d, size) != protectionData.size()) {
 				fail();
@@ -35,7 +36,9 @@ Chunk::Chunk(i32 x, i32 y, const WorldStorage& ws)
 			rle::decompress(d, size, protectionData.data(), protectionData.size());
 		} catch(std::length_error& e) {
 			fail();
+			return false;
 		}
+		return true;
 	});
 
 	data.setChunkWriter("woPp", [this] () {
@@ -92,24 +95,26 @@ bool Chunk::setPixel(u16 x, u16 y, RGB clr) {
 
 void Chunk::setProtectionGid(u8 x, u8 y, u32 gid) {
 	//lastAction = jsDateNow();
-	x &= 0xF;
-	y &= 0xF;
+	x &= 0x1F;
+	y &= 0x1F;
+	pngFileOutdated = true;
+	pngCacheOutdated = true;
 	std::unique_lock<std::shared_timed_mutex> _(sm);
-	protectionData[y * 16 + x] = gid;
+	protectionData[y * 32 + x] = gid;
 }
 
 u32 Chunk::getProtectionGid(u8 x, u8 y) const {
-	x &= 0xF;
-	y &= 0xF;
+	x &= 0x1F;
+	y &= 0x1F;
 	//std::shared_lock<std::shared_timed_mutex> _(sm);
-	return protectionData[y * 16 + x];
+	return protectionData[y * 32 + x];
 }
 
 bool Chunk::isPngCacheOutdated() const {
 	return pngCacheOutdated;
 }
 
-void Chunk::unsetPngOutdatedFlag() {
+void Chunk::unsetCacheOutdatedFlag() {
 	pngCacheOutdated = false;
 }
 
@@ -134,7 +139,7 @@ i64 Chunk::getLastActionTime() const {
 }
 
 bool Chunk::shouldUnload(bool ignoreTime) const {
-	return canUnload && (ignoreTime || jsDateNow() - lastAction > 300000);
+	return canUnload && (ignoreTime || jsDateNow() - lastAction > 60000);
 }
 
 void Chunk::preventUnloading(bool state) {
