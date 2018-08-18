@@ -66,9 +66,9 @@ public:
 	const std::unordered_map<u64, Chunk>::iterator get_chunk(i32 x, i32 y, bool create = true);
 	void send_chunk(uWS::HttpResponse *, i32 x, i32 y);
 
-	void del_chunk(i32 x, i32 y, const RGB);
+	void del_chunk(i32 x, i32 y, const RGB_u);
 	void paste_chunk(const i32 x, const i32 y, char const * const);
-	bool put_px(i32 x, i32 y, const RGB, u8 placerRank, u32 id);
+	bool put_px(i32 x, i32 y, const RGB_u, u8 placerRank, u32 id);
 
 	void broadcast(const std::string& msg) const;
 

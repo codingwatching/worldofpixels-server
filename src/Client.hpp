@@ -31,7 +31,7 @@ private:
 	bool stealthadmin;
 	bool suspicious;
 	pinfo_t pos;
-	RGB lastclr;
+	RGB_u lastclr;
 
 public:
 	SocketInfo * si;
@@ -42,8 +42,8 @@ public:
 
 	bool can_edit();
 
-	void put_px(const i32 x, const i32 y, const RGB);
-	void del_chunk(const i32 x, const i32 y, const RGB);
+	void put_px(const i32 x, const i32 y, const RGB_u);
+	void del_chunk(const i32 x, const i32 y, const RGB_u);
 
 	void teleport(const i32 x, const i32 y);
 	void move(const pinfo_t&);

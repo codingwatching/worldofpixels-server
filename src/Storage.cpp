@@ -57,8 +57,8 @@ u16 WorldStorage::getPixelRate() {
 	return rate;
 }
 
-RGB WorldStorage::getBackgroundColor() const {
-	RGB clr = {255, 255, 255};
+RGB_u WorldStorage::getBackgroundColor() const {
+	RGB_u clr = {255, 255, 255};
 	if (hasProp("bgcolor")) try {
 		clr.rgb = stoul(getProp("bgcolor"));
 		// switch bytes around so they're read in the correct HTML color order
@@ -86,7 +86,7 @@ void WorldStorage::setPixelRate(u16 v) {
 	setProp("paintrate", std::to_string(v));
 }
 
-void WorldStorage::setBackgroundColor(RGB clr) {
+void WorldStorage::setBackgroundColor(RGB_u clr) {
 	setProp("bgcolor", std::to_string(clr.rgb));
 }
 

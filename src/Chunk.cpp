@@ -82,7 +82,7 @@ Chunk::~Chunk() {
 	}
 }
 
-bool Chunk::setPixel(u16 x, u16 y, RGB clr) {
+bool Chunk::setPixel(u16 x, u16 y, RGB_u clr) {
 	if (data.getPixel(x, y).rgb != clr.rgb) {
 		lastAction = jsDateNow();
 		data.setPixel(x, y, clr);

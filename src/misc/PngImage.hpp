@@ -21,17 +21,17 @@ public:
 	PngImage();
 	PngImage(const std::string&);
 	PngImage(u8* filebuf, sz_t len);
-	PngImage(u32 w, u32 h, RGB = {255, 255, 255});
+	PngImage(u32 w, u32 h, RGB_u = {255, 255, 255});
 
-	void applyTransform(std::function<RGB(u32 x, u32 y)>);
-	RGB getPixel(u32 x, u32 y) const;
-	void setPixel(u32 x, u32 y, RGB);
-	void fill(RGB);
+	void applyTransform(std::function<RGB_u(u32 x, u32 y)>);
+	RGB_u getPixel(u32 x, u32 y) const;
+	void setPixel(u32 x, u32 y, RGB_u);
+	void fill(RGB_u);
 
 	void setChunkReader(const std::string&, std::function<bool(u8*, sz_t)>);
 	void setChunkWriter(const std::string&, std::function<std::pair<std::unique_ptr<u8[]>, sz_t>()>);
 
-	void allocate(u32 w, u32 h, RGB);
+	void allocate(u32 w, u32 h, RGB_u);
 	void readFile(const std::string&);
 	void readFileOnMem(u8 * filebuf, sz_t len);
 	void writeFileOnMem(std::vector<u8>& out);

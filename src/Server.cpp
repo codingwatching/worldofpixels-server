@@ -401,7 +401,7 @@ Server::Server(std::string basePath)
 		delete si;
 	});
 
-	h.getDefaultGroup<uWS::SERVER>().startAutoPing(45000);
+	h.getDefaultGroup<uWS::SERVER>().startAutoPing(15000);
 }
 
 void Server::broadcastmsg(const std::string& msg) {

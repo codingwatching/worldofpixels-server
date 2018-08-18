@@ -32,13 +32,13 @@ public:
 	bool hasPassword();
 
 	u16 getPixelRate();
-	RGB getBackgroundColor() const;
+	RGB_u getBackgroundColor() const;
 	std::string getMotd();
 	std::string getPassword();
 	bool getGlobalModeratorsAllowed(); // to be removed
 
 	void setPixelRate(u16);
-	void setBackgroundColor(RGB);
+	void setBackgroundColor(RGB_u);
 	void setMotd(std::string);
 	void setPassword(std::string);
 	void setGlobalModeratorsAllowed(bool);

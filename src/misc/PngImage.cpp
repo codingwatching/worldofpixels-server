@@ -204,11 +204,11 @@ PngImage::PngImage(u8* filebuf, sz_t len) {
 	readFileOnMem(filebuf, len);
 }
 
-PngImage::PngImage(u32 w, u32 h, RGB bg) {
+PngImage::PngImage(u32 w, u32 h, RGB_u bg) {
 	allocate(w, h, bg);
 }
 
-void PngImage::applyTransform(std::function<RGB(u32 x, u32 y)> func) {
+void PngImage::applyTransform(std::function<RGB_u(u32 x, u32 y)> func) {
 	for (u32 y = 0; y < h; y++) {
 		for (u32 x = 0; x < w; x++) {
 			setPixel(x, y, func(x, y));
@@ -216,7 +216,7 @@ void PngImage::applyTransform(std::function<RGB(u32 x, u32 y)> func) {
 	}
 }
 
-RGB PngImage::getPixel(u32 x, u32 y) const {
+RGB_u PngImage::getPixel(u32 x, u32 y) const {
 	u8 * d = data.get();
 	return {
 		d[(y * w + x) * 3],
@@ -225,14 +225,14 @@ RGB PngImage::getPixel(u32 x, u32 y) const {
 	};
 }
 
-void PngImage::setPixel(u32 x, u32 y, RGB clr) {
+void PngImage::setPixel(u32 x, u32 y, RGB_u clr) {
 	u8 * d = data.get();
 	d[(y * w + x) * 3] = clr.r;
 	d[(y * w + x) * 3 + 1] = clr.g;
 	d[(y * w + x) * 3 + 2] = clr.b;
 }
 
-void PngImage::fill(RGB clr) {
+void PngImage::fill(RGB_u clr) {
 	u8 * d = data.get();
 	for (sz_t i = 0; i < w * h * 3; i++) {
 		d[i] = (u8) (clr.rgb >> ((i % 3) * 8));
@@ -247,7 +247,7 @@ void PngImage::setChunkWriter(const std::string& s, std::function<std::pair<std:
 	chunkWriters[s] = std::move(f);
 }
 
-void PngImage::allocate(u32 w, u32 h, RGB bg) {
+void PngImage::allocate(u32 w, u32 h, RGB_u bg) {
 	data = std::make_unique<u8[]>(w * h * 3);
 	this->w = w;
 	this->h = h;

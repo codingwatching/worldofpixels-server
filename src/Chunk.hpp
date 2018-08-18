@@ -31,7 +31,7 @@ public:
 	Chunk(Chunk&&);
 	~Chunk();
 
-	bool setPixel(u16 x, u16 y, RGB);
+	bool setPixel(u16 x, u16 y, RGB_u);
 
 	void setProtectionGid(u8 x, u8 y, u32 gid);
 	u32 getProtectionGid(u8 x, u8 y) const;

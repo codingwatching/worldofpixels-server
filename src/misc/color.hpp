@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <misc/explints.hpp>
 
-union RGB {
+union RGB_u {
 	struct {
 		u8 r;
 		u8 g;
@@ -12,4 +12,4 @@ union RGB {
 	u32 rgb;
 };
 
-double ColourDistance(RGB e1, RGB e2);
+double ColourDistance(RGB_u e1, RGB_u e2);

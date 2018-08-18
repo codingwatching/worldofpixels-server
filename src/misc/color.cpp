@@ -3,7 +3,7 @@
 
 /* From: http://www.compuphase.com/cmetric.htm */
 
-double ColourDistance(RGB e1, RGB e2){
+double ColourDistance(RGB_u e1, RGB_u e2){
 	long rmean = ( (long)e1.r + (long)e2.r ) / 2;
 	long r = (long)e1.r - (long)e2.r;
 	long g = (long)e1.g - (long)e2.g;

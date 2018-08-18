@@ -35,7 +35,7 @@ bool Client::can_edit() {
 	return pixupdlimit.can_spend();
 }
 
-void Client::put_px(const i32 x, const i32 y, const RGB clr) {
+void Client::put_px(const i32 x, const i32 y, const RGB_u clr) {
 	if(is_admin() || can_edit()){
 		u32 distx = (x >> 4) - (pos.x >> 8); distx *= distx;
 		u32 disty = (y >> 4) - (pos.y >> 8); disty *= disty;
@@ -54,7 +54,7 @@ void Client::put_px(const i32 x, const i32 y, const RGB clr) {
 	}
 }
 
-void Client::del_chunk(const i32 x, const i32 y, const RGB clr) {
+void Client::del_chunk(const i32 x, const i32 y, const RGB_u clr) {
 	if ((is_mod() && can_edit()) || is_admin()) {
 		wrld.del_chunk(x, y, clr);
 	}

@@ -290,7 +290,7 @@ void World::send_chunk(uWS::HttpResponse * res, i32 x, i32 y) {
 	}
 }
 
-void World::del_chunk(const i32 x, const i32 y, const RGB clr){
+void World::del_chunk(const i32 x, const i32 y, const RGB_u clr){
 	#warning "FIXME"
 	/*Chunk * const c = get_chunk(x, y);
 	if(c){
@@ -317,7 +317,7 @@ void World::paste_chunk(const i32 x, const i32 y, char const * const data){
 	}*/
 }
 
-bool World::put_px(const i32 x, const i32 y, const RGB clr, u8 placerRank, u32 id) {
+bool World::put_px(const i32 x, const i32 y, const RGB_u clr, u8 placerRank, u32 id) {
 	auto chunk = get_chunk(x >> 9, y >> 9);
 	if (chunk == chunks.end()) {
 		return false;
