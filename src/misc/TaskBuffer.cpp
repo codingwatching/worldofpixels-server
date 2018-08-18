@@ -4,6 +4,7 @@
 	#include <pthread.h>
 #endif
 
+#include <chrono>
 #include <iostream>
 #include <uWS.h>
 
@@ -24,7 +25,7 @@ TaskBuffer::TaskBuffer(uS::Loop * loop)
 
 TaskBuffer::~TaskBuffer() {
 	shouldRun.clear();
-	cv.notify_all();
+	cv.notify_one();
 	worker.join();
 }
 
@@ -83,7 +84,7 @@ void TaskBuffer::executeTasks() {
 			}
 		} else {
 			/* Only wait if the vector is empty */
-			cv.wait(uLock);
+			cv.wait_for(uLock, std::chrono::seconds(1));
 		}
 	} while (shouldRun.test_and_set());
 }

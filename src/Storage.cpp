@@ -33,8 +33,8 @@ std::string WorldStorage::getChunkFilePath(i32 x, i32 y) const {
 	return worldDir + "/r." + std::to_string(x) + "." + std::to_string(y) + ".png";
 }
 
-void WorldStorage::save() {
-	writeToDisk();
+bool WorldStorage::save() {
+	return writeToDisk();
 }
 
 bool WorldStorage::hasMotd() {

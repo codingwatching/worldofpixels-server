@@ -1,14 +1,12 @@
 #pragma once
 
 #include <Storage.hpp>
-#include <Client.hpp>
 #include <Chunk.hpp>
 #include <types.hpp>
 
 #include <misc/color.hpp>
 #include <misc/explints.hpp>
 #include <misc/IdSys.hpp>
-#include <misc/TaskBuffer.hpp>
 
 #include <string>
 #include <set>
@@ -16,6 +14,9 @@
 #include <map>
 #include <vector>
 #include <mutex>
+
+class TaskBuffer;
+class Client;
 
 namespace uWS {
 	struct HttpResponse;
@@ -71,7 +72,7 @@ public:
 
 	void broadcast(const std::string& msg) const;
 
-	void save();
+	bool save();
 
 	bool is_empty() const;
 	bool mods_enabled();

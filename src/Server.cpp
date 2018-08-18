@@ -1,4 +1,9 @@
 #include "Server.hpp"
+
+#include <Client.hpp>
+#include <WorldManager.hpp>
+#include <BansManager.hpp>
+#include <World.hpp>
 #include <keys.hpp>
 
 #include <misc/utils.hpp>
@@ -14,17 +19,17 @@ constexpr auto asyncDeleter = [](uS::Async * a) {
 };
 
 Server::Server(std::string basePath)
-: h(uWS::NO_DELAY, true, 16384),
+: startupTime(jsDateNow()),
+  h(uWS::NO_DELAY, true, 16384),
   stopCaller(new uS::Async(h.getLoop()), asyncDeleter),
   s(std::move(basePath)),
   bm(s.getBansManager()),
   tb(h.getLoop()),
   tc(h.getLoop()),
   hcli(h.getLoop()),
+  wm(tb, tc, s),
   cmds(this),
-  startupTime(jsDateNow()),
   totalConnections(0),
-  worldTickTimer(0),
   saveTimer(0),
   maxconns(6),
   captcha_required(false),
@@ -76,14 +81,15 @@ Server::Server(std::string basePath)
 	});
 
 	api.set("view", [this] (uWS::HttpResponse * res, auto args) {
-		if (args.size() != 4 || !this->verifyWorldName(args[1])) return ApiProcessor::INVALID_ARGS;
-		// wtf, gcc?
-		auto world = this->getWorld(args[1], false);
-		if (world == worlds.end()) {
+		if (args.size() != 4 || !wm.verifyWorldName(args[1])) return ApiProcessor::INVALID_ARGS;
+
+		if (!wm.isLoaded(args[1])) {
 			// nginx is supposed to serve unloaded worlds and chunks.
 			res->end("\"This world is not loaded!\"", 27);
 			return ApiProcessor::OK;
 		}
+
+		World& world = wm.getOrLoadWorld(args[1]);
 
 		i32 x = 0;
 		i32 y = 0;
@@ -94,7 +100,7 @@ Server::Server(std::string basePath)
 		} catch(...) { return ApiProcessor::INVALID_ARGS; }
 
 		// will encode the png in another thread and end the request when done
-		world->second.send_chunk(res, x, y);
+		world.send_chunk(res, x, y);
 
 		return ApiProcessor::OK;
 	});
@@ -114,6 +120,16 @@ Server::Server(std::string basePath)
 
 	h.onConnection([this](uWS::WebSocket<uWS::SERVER> * ws, uWS::HttpRequest req) {
 		++totalConnections;
+		/*uWS::Header argHead(req.getHeader("sec-websocket-protocol", 22));
+		if (!argHead) {
+			ws->terminate();
+			return;
+		}
+		auto args(tokenize(argHead.toString(), ','));
+		for (auto& s : args) {
+			ltrim(s);
+			std::cout << s << std::endl;
+		}*/
 		SocketInfo * si = new SocketInfo();
 		si->ip = ws->getAddress().address;
 
@@ -384,6 +400,8 @@ Server::Server(std::string basePath)
 		connsws.erase(ws);
 		delete si;
 	});
+
+	h.getDefaultGroup<uWS::SERVER>().startAutoPing(45000);
 }
 
 void Server::broadcastmsg(const std::string& msg) {
@@ -397,17 +415,15 @@ bool Server::listenAndRun() {
 	const char * host = addr.size() > 0 ? addr.c_str() : nullptr;
 
 	if (!h.listen(host, port, nullptr, uS::ListenOptions::ONLY_IPV4)) {
+		unsafeStop();
 		return false;
 	}
 
-	worldTickTimer = tc.startTimer([this] {
-		tickWorlds();
-		return true;
-	}, 60);
-
 	saveTimer = tc.startTimer([this] {
 		kickInactivePlayers();
-		save_now();
+		if (wm.saveAll()) {
+			std::cout << "Worlds saved." << std::endl;
+		}
 		return true;
 	}, 900000);
 
@@ -417,67 +433,18 @@ bool Server::listenAndRun() {
 	return true;
 }
 
-void Server::save_now() {
-	for (auto& world : worlds) {
-		world.second.save();
-	}
-
-	std::cout << "Worlds saved." << std::endl;
-	admintell("DEVWorlds saved.");
-}
-
-void Server::tickWorlds() {
-	for (auto & w : worlds) {
-		w.second.send_updates();
-	}
-}
-
-bool Server::verifyWorldName(const std::string& s) {
-	/* Validate world name, allowed chars are a..z, 0..9, '_' and '.' */
-	if (s.size() > 24 || s.size() < 1) {
-		return false;
-	}
-
-	for (char c : s) {
-		if (!((c >  96 && c < 123) ||
-			  (c >  47 && c <  58) ||
-			   c == 95 || c == 46)) {
-			return false;
-		}
-	}
-	return true;
-}
-
-const std::map<std::string, World>::iterator Server::getWorld(std::string name, bool create) {
-	auto search = worlds.find(name);
-
-	if (search == worlds.end() && create) {
-		// construct the world without extra copies
-		// this uglyness is fixed on c++17, but for now this works
-		search = worlds.emplace(std::piecewise_construct,
-			std::forward_as_tuple(name),
-			std::forward_as_tuple(s.getWorldStorageFor(name), tb)).first;
-
-		search->second.setUnloadFunc([this, search] {
-			worlds.erase(search);
-		});
-	}
-
-	return search;
-}
-
 void Server::join_world(uWS::WebSocket<uWS::SERVER> * ws, const std::string& worldName) {
-	if (!verifyWorldName(worldName)) {
+	if (!wm.verifyWorldName(worldName)) {
 		ws->close();
 		return;
 	}
 
-	auto world = getWorld(worldName);
+	World& world = wm.getOrLoadWorld(worldName);
 
 	SocketInfo * si = static_cast<SocketInfo *>(ws->getUserData());
-	si->player = new Client(ws, world->second, si);
+	si->player = new Client(ws, world, si);
 
-	world->second.add_cli(si->player);
+	world.add_cli(si->player);
 }
 
 bool Server::is_adminpw(const std::string& pw) {
@@ -633,7 +600,7 @@ bool Server::is_connected(uWS::WebSocket<uWS::SERVER> * ws) {
 
 void Server::unsafeStop() {
 	if (stopCaller) {
-		h.getDefaultGroup<uWS::SERVER>().close(1001);
+		h.getDefaultGroup<uWS::SERVER>().terminate();
 		stopCaller = nullptr;
 		tc.clearTimers();
 		tb.prepareForDestruction();

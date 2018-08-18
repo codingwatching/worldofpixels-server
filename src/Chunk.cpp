@@ -23,11 +23,11 @@ Chunk::Chunk(i32 x, i32 y, const WorldStorage& ws)
   		std::cerr << "Protection data corrupted for chunk "
 		          << this->x << ", " << this->y << ". Resetting." << std::endl;
 		protectionData.fill(0);
+		pngFileOutdated = true;
   	};
 
 	data.setChunkReader("woPp", [this, fail, &readerCalled] (u8 * d, sz_t size) {
 		readerCalled = true;
-		std::cout << "reader called" << std::endl;
 		try {
 			if (rle::getItems<u32>(d, size) != protectionData.size()) {
 				fail();
@@ -127,11 +127,13 @@ const std::vector<u8>& Chunk::getPngData() const {
 	return pngCache;
 }
 
-void Chunk::save() {
+bool Chunk::save() {
 	if (pngFileOutdated) {
 		data.writeFile(ws.getChunkFilePath(x, y));
 		pngFileOutdated = false;
+		return true;
 	}
+	return false;
 }
 
 i64 Chunk::getLastActionTime() const {

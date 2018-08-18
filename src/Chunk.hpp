@@ -41,7 +41,7 @@ public:
 	void updatePngCache();
 	const std::vector<u8>& getPngData() const;
 
-	void save();
+	bool save();
 
 	i64 getLastActionTime() const;
 	bool shouldUnload(bool) const;

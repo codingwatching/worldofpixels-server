@@ -1,5 +1,6 @@
 #include "PropertyReader.hpp"
 
+#include <cstring>
 #include <stdexcept>
 #include <cstdint>
 #include <fstream>
@@ -41,24 +42,21 @@ bool PropertyReader::readFromDisk() {
 }
 
 bool PropertyReader::writeToDisk(bool force) {
-	if (!(propsChanged || force)) {
-		return true;
+	if (!propsChanged && !force) {
+		return false;
 	}
 
-	bool ok = true;
 	if (props.size() != 0) {
 		std::ofstream file(filePath, std::ios_base::trunc);
-		ok = !!file;
-		if (file.good()) {
-			for (auto & kv : props) {
-				file << kv.first << " " << kv.second << "\n";
-			}
+		// just throw if it couldn't open the file
+		for (auto & kv : props) {
+			file << kv.first << " " << kv.second << "\n";
 		}
-	} else {
-		std::remove(filePath.c_str());
+	} else if (int err = std::remove(filePath.c_str())) {
+		throw std::runtime_error("Couldn't delete empty file (" + filePath + "): " + std::strerror(err));
 	}
 
-	return ok;
+	return true;
 }
 
 bool PropertyReader::isEmpty() const {

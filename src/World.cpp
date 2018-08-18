@@ -3,6 +3,9 @@
 #include <uWS.h>
 
 #include <config.hpp>
+#include <Client.hpp>
+
+#include <misc/TaskBuffer.hpp>
 
 #include <iostream>
 #include <utility>
@@ -361,11 +364,14 @@ void World::broadcast(const std::string& msg) const {
 	uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
 }
 
-void World::save() {
-	for(auto& chunk : chunks){
-		chunk.second.save();
+bool World::save() {
+	bool didStuff = false;
+	for (auto& chunk : chunks) {
+		didStuff |= chunk.second.save();
 	}
-	WorldStorage::save();
+
+	didStuff |= WorldStorage::save();
+	return didStuff;
 }
 
 bool World::is_empty() const {

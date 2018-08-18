@@ -26,7 +26,7 @@ public:
 	const std::string& getWorldDir() const;
 	std::string getChunkFilePath(i32 x, i32 y) const;
 
-	void save();
+	bool save();
 
 	bool hasMotd();
 	bool hasPassword();
