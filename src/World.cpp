@@ -27,14 +27,14 @@ u64 key(i32 x, i32 y) {
 
 /* World class functions */
 
-World::World(WorldStorage ws, TaskBuffer& tb)
-: WorldStorage(std::move(ws)),
+World::World(std::tuple<std::string, std::string> wsArgs, TaskBuffer& tb)
+: WorldStorage(std::move(wsArgs)),
   tb(tb),
   updateRequired(false),
   drawRestricted(false) {
-	convertProtectionData([this](i32 x, i32 y) {
+	/*convertProtectionData([this](i32 x, i32 y) {
 		setChunkProtection(x, y, true);
-	});
+	});*/
 }
 
 World::~World() {
@@ -229,6 +229,7 @@ const std::unordered_map<u64, Chunk>::iterator World::get_chunk(const i32 x, con
 	auto search = chunks.find(key(x, y));
 	if (search == chunks.end()) {
 		if (create) {
+			WorldStorage::maybeConvert(x, y);
 			WorldStorage& ws = *this;
 			search = chunks.emplace(std::piecewise_construct,
 				std::forward_as_tuple(key(x, y)),
@@ -244,18 +245,19 @@ const std::unordered_map<u64, Chunk>::iterator World::get_chunk(const i32 x, con
 	return search;
 }
 
-void World::send_chunk(uWS::HttpResponse * res, i32 x, i32 y) {
+// returns true if this function ended the request before returning
+bool World::send_chunk(uWS::HttpResponse * res, i32 x, i32 y) {
 	// will load the chunk if unloaded... possible race with nginx if not
 	auto chunk = get_chunk(x, y);
 	if (chunk == chunks.end()) {
 		res->end();
-		return;
+		return true;
 	}
 
 	if (!chunk->second.isPngCacheOutdated()) {
 		const auto& d = chunk->second.getPngData();
 		res->end(reinterpret_cast<const char *>(d.data()), d.size());
-		return;
+		return true;
 	}
 
 	u64 k = key(x, y);
@@ -280,13 +282,24 @@ void World::send_chunk(uWS::HttpResponse * res, i32 x, i32 y) {
 			tryUnload();
 		};
 
-		tb.queue([&c, end](TaskBuffer& tb) {
+		tb.queue([&c, end{std::move(end)}](TaskBuffer& tb) {
 			c.updatePngCache();
 			tb.runInMainThread(std::move(end));
 		});
 	} else {
 		// add this request to the list, if a png is already being encoded
-		search->second.emplace_back(res);
+		search->second.emplace(res);
+	}
+
+	return false;
+}
+
+void World::cancelChunkRequest(i32 x, i32 y, uWS::HttpResponse * res) {
+	auto search = ongoingChunkRequests.find(key(x, y));
+	if (search != ongoingChunkRequests.end()) {
+		search->second.erase(res);
+		// can't erase the map entry, even if the set is empty
+		// because when the encoding finishes it will be accessed
 	}
 }
 

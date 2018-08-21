@@ -24,10 +24,11 @@ Server::Server(std::string basePath)
   stopCaller(new uS::Async(h.getLoop()), asyncDeleter),
   s(std::move(basePath)),
   bm(s.getBansManager()),
-  tb(h.getLoop()),
+  tb(h.getLoop()), // XXX: this should get destructed before other users of the taskbuffer, like WorldManager. what do?
   tc(h.getLoop()),
   hcli(h.getLoop()),
   wm(tb, tc, s),
+  api(h, "status"),
   cmds(this),
   totalConnections(0),
   saveTimer(0),
@@ -44,7 +45,7 @@ Server::Server(std::string basePath)
 	stopCaller->setData(this);
 	tb.setWorkerThreadSchedulingPriorityToLowestPossibleValueAllowedByTheOperatingSystem();
 
-	api.set("status", [this] (uWS::HttpResponse * res, auto args) {
+	api.set("status", [this] (uWS::HttpResponse * res, auto& rs, auto args) {
 		std::string ip(res->getHttpSocket()->getAddress().address);
 
 		u8 yourConns = 0;
@@ -68,7 +69,7 @@ Server::Server(std::string basePath)
 		return ApiProcessor::OK;
 	});
 
-	api.set("disconnectme", [this] (uWS::HttpResponse * res, auto args) {
+	api.set("disconnectme", [this] (uWS::HttpResponse * res, auto& rs, auto args) {
 		std::string ip(res->getHttpSocket()->getAddress().address);
 
 		nlohmann::json j = {
@@ -80,8 +81,10 @@ Server::Server(std::string basePath)
 		return ApiProcessor::OK;
 	});
 
-	api.set("view", [this] (uWS::HttpResponse * res, auto args) {
-		if (args.size() != 4 || !wm.verifyWorldName(args[1])) return ApiProcessor::INVALID_ARGS;
+	api.set("view", [this] (uWS::HttpResponse * res, auto& rs, auto args) {
+		if (args.size() != 4 || !wm.verifyWorldName(args[1])) {
+			return ApiProcessor::INVALID_ARGS;
+		}
 
 		if (!wm.isLoaded(args[1])) {
 			// nginx is supposed to serve unloaded worlds and chunks.
@@ -99,23 +102,17 @@ Server::Server(std::string basePath)
 			y = std::stoi(args[3]);
 		} catch(...) { return ApiProcessor::INVALID_ARGS; }
 
-		// will encode the png in another thread and end the request when done
-		world.send_chunk(res, x, y);
+		// will encode the png in another thread if necessary and end the request when done
+		if (!world.send_chunk(res, x, y)) {
+			// didn't immediately send
+			rs.onCancel = [&world, x, y, res] {
+				// the world is guaranteed not to unload until all requests finish
+				// so this reference should be valid
+				world.cancelChunkRequest(x, y, res);
+			};
+		}
 
 		return ApiProcessor::OK;
-	});
-
-	h.onHttpRequest([this](uWS::HttpResponse * res, uWS::HttpRequest req,
-						char * data, sz_t len, sz_t rem) {
-		auto args(tokenize(req.getUrl().toString(), '/', true));
-
-		if (args.size() == 0) {
-			args.emplace_back("status");
-		}
-
-		if (auto status = api.exec(res, std::move(args))) {
-			res->end("\"Unknown request\"", 17);
-		}
 	});
 
 	h.onConnection([this](uWS::WebSocket<uWS::SERVER> * ws, uWS::HttpRequest req) {
@@ -416,8 +413,11 @@ bool Server::listenAndRun() {
 
 	if (!h.listen(host, port, nullptr, uS::ListenOptions::ONLY_IPV4)) {
 		unsafeStop();
+		std::cerr << "Couldn't listen on " << addr << ":" << port << "!" << std::endl;
 		return false;
 	}
+
+	std::cout << "Listening on " << addr << ":" << port << std::endl;
 
 	saveTimer = tc.startTimer([this] {
 		kickInactivePlayers();
@@ -600,7 +600,7 @@ bool Server::is_connected(uWS::WebSocket<uWS::SERVER> * ws) {
 
 void Server::unsafeStop() {
 	if (stopCaller) {
-		h.getDefaultGroup<uWS::SERVER>().terminate();
+		h.getDefaultGroup<uWS::SERVER>().close(1012);
 		stopCaller = nullptr;
 		tc.clearTimers();
 		tb.prepareForDestruction();

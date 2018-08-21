@@ -14,6 +14,7 @@
 #include <map>
 #include <vector>
 #include <mutex>
+#include <tuple>
 
 class TaskBuffer;
 class Client;
@@ -32,14 +33,14 @@ class World : public WorldStorage {
 
 	std::set<Client *> clients;
 	std::unordered_map<u64, Chunk> chunks;
-	std::map<u64, std::vector<uWS::HttpResponse *>> ongoingChunkRequests;
+	std::map<u64, std::set<uWS::HttpResponse *>> ongoingChunkRequests;
 
 	std::vector<pixupd_t> pxupdates;
 	std::set<Client *> plupdates;
 	std::set<u32> plleft;
 
 public:
-	World(WorldStorage, TaskBuffer&);
+	World(std::tuple<std::string, std::string>, TaskBuffer&);
 	~World();
 
 	World(World&&) = default;
@@ -64,7 +65,8 @@ public:
 	void send_updates();
 
 	const std::unordered_map<u64, Chunk>::iterator get_chunk(i32 x, i32 y, bool create = true);
-	void send_chunk(uWS::HttpResponse *, i32 x, i32 y);
+	bool send_chunk(uWS::HttpResponse *, i32 x, i32 y);
+	void cancelChunkRequest(i32 x, i32 y, uWS::HttpResponse *);
 
 	void del_chunk(i32 x, i32 y, const RGB_u);
 	void paste_chunk(const i32 x, const i32 y, char const * const);

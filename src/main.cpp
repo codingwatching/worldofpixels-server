@@ -54,7 +54,6 @@ int main(int argc, char * argv[]) {
 	s = std::make_unique<Server>(); // TODO: configurable baseDir
 
 	if (!s->listenAndRun()) {
-		std::cerr << "Couldn't listen on specified address!" << std::endl;
 		return 1;
 	}
 

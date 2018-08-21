@@ -40,7 +40,7 @@ World& WorldManager::getOrLoadWorld(std::string name) {
 		sr = worlds.emplace(
 			std::piecewise_construct,
 			std::forward_as_tuple(name),
-			std::forward_as_tuple(s.getWorldStorageFor(name), tb)
+			std::forward_as_tuple(s.getWorldStorageArgsFor(name), tb)
 		).first;
 
 		sr->second.setUnloadFunc([this, sr] {

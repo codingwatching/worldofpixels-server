@@ -4,4 +4,4 @@ build
 out
 prepareUpload.sh
 bans.json
-props.cfg
+props.txt

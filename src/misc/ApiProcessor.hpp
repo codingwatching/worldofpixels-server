@@ -8,7 +8,12 @@
 
 namespace uWS {
 	struct HttpResponse;
+	struct Hub;
 }
+
+struct RequestStorage {
+	std::function<void()> onCancel;
+};
 
 class ApiProcessor {
 public:
@@ -20,14 +25,16 @@ public:
 	};
 
 	using ArgList = std::vector<std::string>;
-	using Func = std::function<Status(uWS::HttpResponse *, ArgList)>;
+	using Func = std::function<Status(uWS::HttpResponse *, RequestStorage&, ArgList)>;
 
 private:
 	std::unordered_map<std::string, Func> methods;
 
 public:
-	ApiProcessor();
+	ApiProcessor(uWS::Hub&, std::string defaultRequest);
 
 	void set(std::string, Func);
-	Status exec(uWS::HttpResponse *, ArgList);
+
+private:
+	Status exec(uWS::HttpResponse *, RequestStorage&, ArgList);
 };

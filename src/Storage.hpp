@@ -2,25 +2,46 @@
 
 #include <string>
 #include <functional>
+#include <tuple>
+#include <vector>
+#include <map>
+#include <set>
 
 #include <BansManager.hpp>
 #include <misc/explints.hpp>
 #include <misc/PropertyReader.hpp>
 #include <misc/color.hpp>
 
+class World;
 class Storage;
+
+union twoi32 {
+	struct {
+		i32 x;
+		i32 y;
+	};
+	u64 pos;
+};
+
+bool operator<(const twoi32& a, const twoi32& b);
 
 class WorldStorage : PropertyReader {
 	const std::string worldDir; // path for the world files
 	const std::string worldName;
 
+	std::map<u64, std::vector<twoi32>> pclust;
+	std::set<twoi32> remainingOldClusters;
+
 	// worldDir = directory of this world's data
 	WorldStorage(std::string worldDir, std::string worldName);
+	WorldStorage(std::tuple<std::string, std::string>);
 
 public:
 	// delete the copy constructors, we only want this class to be moved at most
-	WorldStorage(WorldStorage&&) = default;
-	WorldStorage& operator=(WorldStorage&&) = default;
+	//WorldStorage(WorldStorage&&) = default;
+	//WorldStorage& operator=(WorldStorage&&) = default;
+	WorldStorage(const WorldStorage&) = delete;
+	~WorldStorage();
 
 	const std::string& getWorldName() const;
 	const std::string& getWorldDir() const;
@@ -43,9 +64,12 @@ public:
 	void setPassword(std::string);
 	void setGlobalModeratorsAllowed(bool);
 
-	void convertProtectionData(std::function<void(i32, i32)>);
+	void convertNext();
+	void maybeConvert(i32, i32);
+	void loadProtectionData();
+	void saveProtectionData();
 
-	friend Storage;
+	friend World;
 };
 
 // i'm wondering if i should make the PropertyReader functions private
@@ -75,5 +99,5 @@ public:
 	void setBindPort(u16);
 
 	BansManager& getBansManager();
-	WorldStorage getWorldStorageFor(std::string worldName);
+	std::tuple<std::string, std::string> getWorldStorageArgsFor(const std::string& worldName);
 };
