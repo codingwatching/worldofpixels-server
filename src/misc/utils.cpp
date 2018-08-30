@@ -9,10 +9,17 @@
 #endif
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <random>
-#include <cctype>
 #include <locale>
+
+#ifdef __GNUG__
+	#define HAVE_CXA_DEMANGLE
+	#include <cstdlib>
+	#include <memory>
+	#include <cxxabi.h>
+#endif
 
 bool makeDir(const std::string& dir) {
 #ifndef __WIN32
@@ -119,4 +126,18 @@ void rtrim(std::string &s) {
 void trim(std::string &s) {
     ltrim(s);
     rtrim(s);
+}
+
+std::string demangle(const char * c) {
+#ifdef HAVE_CXA_DEMANGLE
+	int s = -1;
+	std::unique_ptr<char, void(*)(void*)> result(
+		abi::__cxa_demangle(c, NULL, NULL, &s),
+		std::free
+	);
+
+	return s == 0 ? result.get() : c;
+#else
+	return c;
+#endif
 }

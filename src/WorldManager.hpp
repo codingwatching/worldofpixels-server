@@ -1,4 +1,5 @@
 #pragma once
+
 #include <map>
 #include <string>
 
@@ -15,6 +16,7 @@ class WorldManager {
 	TaskBuffer& tb;
 	Storage& s;
 	u32 tickTimer;
+	u32 ageTimer;
 
 public:
 	WorldManager(TaskBuffer&, TimedCallbacks&, Storage&);
@@ -27,6 +29,8 @@ public:
 
 	sz_t loadedWorlds() const;
 	bool saveAll();
+
+	sz_t unloadOldChunks();
 
 private:
 	void tickWorlds();

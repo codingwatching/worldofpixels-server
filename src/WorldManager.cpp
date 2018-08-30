@@ -12,6 +12,11 @@ WorldManager::WorldManager(TaskBuffer& tb, TimedCallbacks& tc, Storage& s)
 		tickWorlds();
 		return true;
 	}, 60);
+
+	ageTimer = tc.startTimer([this] {
+		unloadOldChunks();
+		return true;
+	}, 65000);
 }
 
 bool WorldManager::verifyWorldName(const std::string& name) {
@@ -62,6 +67,15 @@ bool WorldManager::saveAll() {
 	}
 
 	return didStuff;
+}
+
+sz_t WorldManager::unloadOldChunks() {
+	sz_t totalUnloaded = 0;
+	for (auto& w : worlds) {
+		totalUnloaded += w.second.unloadOldChunks();
+	}
+
+	return totalUnloaded;
 }
 
 void WorldManager::tickWorlds() {

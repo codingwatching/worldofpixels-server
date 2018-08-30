@@ -7,7 +7,7 @@
 #include <unordered_set>
 #include <memory>
 
-#include <Commands.hpp>
+#include <CommandManager.hpp>
 #include <Storage.hpp>
 #include <WorldManager.hpp>
 
@@ -33,13 +33,14 @@ public:
 	AsyncHttp hcli;
 	WorldManager wm;
 	ApiProcessor api;
-	Commands cmds;
+	CommandManager cmd;
+	ConnectionManager conn;
 
-	std::unordered_set<uWS::WebSocket<uWS::SERVER> *> connsws;
+	//std::unordered_set<uWS::WebSocket<uWS::SERVER> *> connsws;
 
-	std::unordered_map<std::string, u8> conns;
+	//std::unordered_map<std::string, u8> conns;
 
-	u32 totalConnections;
+	//u32 totalConnections;
 
 	u32 saveTimer;
 

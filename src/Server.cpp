@@ -29,7 +29,8 @@ Server::Server(std::string basePath)
   hcli(h.getLoop()),
   wm(tb, tc, s),
   api(h, "status"),
-  cmds(this),
+  cmd(*this),
+  conn(h, "OWOP"),
   totalConnections(0),
   saveTimer(0),
   maxconns(6),
@@ -53,7 +54,7 @@ Server::Server(std::string basePath)
 		{ auto s = conns.find(ip); if (s != conns.end()) yourConns = s->second; }
 
 		nlohmann::json j = {
-			{ "motd", "cool stuff" },
+			{ "motd", "Now with Enterprise Quality™ code!" },
 			{ "totalConnections", totalConnections },
 			{ "captchaEnabled", captcha_required },
 			{ "maxConnectionsPerIp", maxconns },
@@ -113,6 +114,11 @@ Server::Server(std::string basePath)
 		}
 
 		return ApiProcessor::OK;
+	});
+
+	conn.onSocketChecked([this] (IncomingConnection& ic) {
+		std::string world(ic.args.at("world"));
+
 	});
 
 	h.onConnection([this](uWS::WebSocket<uWS::SERVER> * ws, uWS::HttpRequest req) {
