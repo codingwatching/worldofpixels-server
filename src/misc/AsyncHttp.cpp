@@ -193,7 +193,7 @@ void AsyncHttp::processCompleted() {
 		if (m->msg == CURLMSG_DONE) {
 			CurlHandle * hdl = nullptr;
 			curl_easy_getinfo(m->easy_handle, CURLINFO_PRIVATE, &hdl);
-			auto result = std::find_if(pendingRequests.begin(), pendingRequests.end(), [hdl](std::unique_ptr<CurlHandle> const & vhdl) {
+			auto result = std::find_if(pendingRequests.begin(), pendingRequests.end(), [hdl] (std::unique_ptr<CurlHandle> const & vhdl) {
 				return vhdl.get() == hdl;
 			});
 

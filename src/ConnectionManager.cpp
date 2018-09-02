@@ -9,14 +9,16 @@
 
 ClosedConnection::ClosedConnection(Client& c)
 : ws(c.getWs()),
-  ip(c.getIp()) { }
+  ip(c.getIp()),
+  wasClient(true) { }
 
 ClosedConnection::ClosedConnection(IncomingConnection& ic)
 : ws(ic.ws),
-  ip(std::move(ic.ip)) { }
+  ip(std::move(ic.ip)),
+  wasClient(false) { }
 
 ConnectionManager::ConnectionManager(uWS::Hub& h, std::string protoName) {
-	h.onConnection([this, pn{std::move(protoName)}](uWS::WebSocket<uWS::SERVER> * ws, uWS::HttpRequest req) {
+	h.onConnection([this, pn{std::move(protoName)}] (uWS::WebSocket<uWS::SERVER> * ws, uWS::HttpRequest req) {
 		// Maybe this could be moved on the upgrade handler, somehow
 		uWS::Header argHead(req.getHeader("sec-websocket-protocol", 22));
 		if (!argHead) {
@@ -25,7 +27,7 @@ ConnectionManager::ConnectionManager(uWS::Hub& h, std::string protoName) {
 		}
 
 		auto args(tokenize(argHead.toString(), ','));
-		ArgList argList;
+		std::map<std::string, std::string> argList;
 
 		if (args.size() == 0 || args[0] != pn) {
 			ws->terminate();
@@ -44,11 +46,11 @@ ConnectionManager::ConnectionManager(uWS::Hub& h, std::string protoName) {
 		handleIncoming(ws, std::move(argList), req, addr.address);
 	});
 
-	h.onDisconnection([this](uWS::WebSocket<uWS::SERVER> * ws, int c, const char * msg, sz_t len) {
+	h.onDisconnection([this] (uWS::WebSocket<uWS::SERVER> * ws, int c, const char * msg, sz_t len) {
 		Client * cl = static_cast<Client *>(ws->getUserData());
 		if (!cl) {
 			// still authenticating
-			auto ic = std::find_if(pending.begin(), pending.end(), [ws](const IncomingConnection& ic) {
+			auto ic = std::find_if(pending.begin(), pending.end(), [ws] (const IncomingConnection& ic) {
 				return ic.ws == ws;
 			});
 			if (ic != pending.end()) {
@@ -63,29 +65,31 @@ ConnectionManager::ConnectionManager(uWS::Hub& h, std::string protoName) {
 	});
 }
 
-void ConnectionManager::addToBeg(std::unique_ptr<ConnectionProcessor> p) {
-	processors.emplace_front(std::move(p));
-}
-
 void ConnectionManager::onSocketChecked(std::function<Client*(IncomingConnection&)> f) {
 	clientTransformer = std::move(f);
 }
 
+void ConnectionManager::forEachProcessor(std::function<void(ConnectionProcessor&)> f) {
+	for (auto& p : processors) {
+		f(*p.get());
+	}
+}
+
 void ConnectionManager::handleIncoming(uWS::WebSocket<uWS::SERVER> * ws,
-		ConnectionManager::ArgList args, uWS::HttpRequest req, std::string ip) {
-	auto ic = pending.emplace_back(ws, std::move(args), processors.begin(), pending.end(), std::move(ip), false);
+		std::map<std::string, std::string> args, uWS::HttpRequest req, std::string ip) {
+	auto ic = pending.emplace_back(UserInfo(), ws, std::move(args), processors.begin(), pending.end(), std::move(ip), false);
 	ic->it = ic;
 
 	for (auto it = processors.begin(); it != processors.end(); ++it) {
-		if (!(*it)->preCheck(*ic)) {
+		if (!(*it)->preCheck(*ic, req)) {
 			nlohmann::json j = {
 				{"t", "auth_error"},
 				{"at", "pre_check"},
-				{"in", demangle(typeid(*p.get()).name())}
+				{"in", demangle(typeid(*(*it).get()))}
 			};
 
 			std::string s(j.dump());
-			ws->send(s.data(), s.size());
+			ws->send(s.data(), s.size(), uWS::TEXT);
 			ic->nextProcessor = it;
 			handleFail(*ic);
 			handleDisconnect(*ic, false);
@@ -98,10 +102,18 @@ void ConnectionManager::handleIncoming(uWS::WebSocket<uWS::SERVER> * ws,
 
 void ConnectionManager::handleAsync(IncomingConnection& ic) {
 	while (ic.nextProcessor != processors.end()) {
-		auto pr = ic.nextProcessor++;
-		if (pr->isAsync()) {
+		auto& pr = *ic.nextProcessor++;
+		if (pr->isAsync(ic)) {
+			{
+				nlohmann::json j = {
+					{"t", "auth_progress"},
+					{"on", demangle(typeid(*pr.get()))}
+				};
+				std::string s(j.dump());
+				ic.ws->send(s.data(), s.size(), uWS::TEXT);
+			}
 			// not safe to use ic after calling callback
-			pr->asyncCheck(ic, [this, &ic, pr](bool ok) {
+			pr->asyncCheck(ic, [this, &ic, &pr] (bool ok) {
 				if (ok && !ic.cancelled) {
 					handleAsync(ic);
 					return;
@@ -112,10 +124,10 @@ void ConnectionManager::handleAsync(IncomingConnection& ic) {
 					nlohmann::json j = {
 						{"t", "auth_error"},
 						{"at", "async_check"},
-						{"in", demangle(typeid(*pr->get()).name())}
+						{"in", demangle(typeid(*pr.get()))}
 					};
 					std::string s(j.dump());
-					ws->send(s.data(), s.size());
+					ic.ws->send(s.data(), s.size(), uWS::TEXT);
 					handleFail(ic);
 				}
 
@@ -139,19 +151,24 @@ void ConnectionManager::handleEnd(IncomingConnection& ic) {
 			nlohmann::json j = {
 				{"t", "auth_error"},
 				{"at", "end_check"},
-				{"in", demangle(typeid(*p.get()).name())}
+				{"in", demangle(typeid(*p.get()))}
 			};
 
 			std::string s(j.dump());
-			ws->send(s.data(), s.size());
+			ic.ws->send(s.data(), s.size(), uWS::TEXT);
 			handleFail(ic);
 			handleDisconnect(ic, true);
 			return;
 		}
 	}
 
-	ic.ws->setUserData(clientTransformer(ic));
+	Client * cl = clientTransformer(ic);
+	ic.ws->setUserData(cl);
 	pending.erase(ic.it);
+
+	for (auto& p : processors) {
+		p->connected(*cl);
+	}
 }
 
 void ConnectionManager::handleDisconnect(IncomingConnection& ic, bool all) {

@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <typeindex>
 
 #include <misc/explints.hpp>
 
@@ -14,4 +15,4 @@ std::string randomStr(sz_t size);
 void rtrim(std::string&);
 void ltrim(std::string&);
 void trim(std::string&);
-std::string demangle(const char *);
+const std::string& demangle(std::type_index);

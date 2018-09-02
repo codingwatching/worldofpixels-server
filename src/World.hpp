@@ -2,26 +2,24 @@
 
 #include <Storage.hpp>
 #include <Chunk.hpp>
+#include <Player.hpp>
 #include <types.hpp>
 
 #include <misc/color.hpp>
 #include <misc/explints.hpp>
 #include <misc/IdSys.hpp>
+#include <misc/fwd_uWS.h>
 
 #include <string>
 #include <set>
 #include <unordered_map>
 #include <map>
 #include <vector>
-#include <mutex>
 #include <tuple>
 
 class TaskBuffer;
 class Client;
-
-namespace uWS {
-	struct HttpResponse;
-}
+class Player;
 
 class World : public WorldStorage {
 	IdSys ids;
@@ -31,60 +29,49 @@ class World : public WorldStorage {
 
 	std::function<void()> unload;
 
-	std::set<Client *> clients;
+	std::set<std::reference_wrapper<Player>> players;
 	std::unordered_map<u64, Chunk> chunks;
 	std::map<u64, std::set<uWS::HttpResponse *>> ongoingChunkRequests;
 
-	std::vector<pixupd_t> pxupdates;
-	std::set<Client *> plupdates;
-	std::set<u32> plleft;
+	std::vector<pixupd_t> pixelUpdates;
+	std::set<std::reference_wrapper<Player>> playerUpdates;
+	std::set<u32> playersLeft; // this could be a vector
 
 public:
 	World(std::tuple<std::string, std::string>, TaskBuffer&);
 	~World();
 
-	World(World&&) = default;
-	World& operator=(World&&) = default;
+	World(const World&) = delete;
 
 	void setUnloadFunc(std::function<void()>);
 
+	void configurePlayerBuilder(Player::Builder&);
+	void playerJoined(Player&);
+	void playerUpdated(Player&);
+	void playerLeft(Player&);
+
+	void schedUpdates();
+	void sendUpdates();
+
 	sz_t unloadOldChunks(bool force = false);
-	void update_all_clients();
-
-	void setChunkProtection(i32 x, i32 y, bool state);
-
-	void add_cli(Client * const);
-	void upd_cli(Client * const);
-	void rm_cli(Client * const);
-	Client * get_cli(const u32 id) const;
-	Client * get_cli(const std::string name) const;
-
-	std::set<Client *> * get_pl();
-
-	void sched_updates();
-	void send_updates();
 
 	const std::unordered_map<u64, Chunk>::iterator get_chunk(i32 x, i32 y, bool create = true);
-	bool send_chunk(uWS::HttpResponse *, i32 x, i32 y);
-	void cancelChunkRequest(i32 x, i32 y, uWS::HttpResponse *);
+	void setChunkProtection(i32 x, i32 y, bool state);
+	bool sendChunk(uWS::HttpResponse *, i32 x, i32 y);
+	void cancelChunkRequest(uWS::HttpResponse *, i32 x, i32 y);
 
-	void del_chunk(i32 x, i32 y, const RGB_u);
-	void paste_chunk(const i32 x, const i32 y, char const * const);
-	bool put_px(i32 x, i32 y, const RGB_u, u8 placerRank, u32 id);
+	bool paint(Player&, i32 x, i32 y, RGB_u);
 
+	void chat(Player&, const std::string&);
 	void broadcast(const std::string& msg) const;
 
 	bool save();
 
-	bool is_empty() const;
-	bool mods_enabled();
-	bool is_pass(std::string const&);
-	u8 get_default_rank();
+	sz_t getPlayerCount() const;
 	void restrictDrawing(bool);
-	u16 get_paintrate();
 
 private:
 	bool isActionPaintAllowed(const Chunk&, i32 x, i32 y, u8 rank); // to be changed
 	bool tryUnloadAllChunks();
-	void tryUnload();
+	void tryUnloadWorld();
 };

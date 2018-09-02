@@ -5,10 +5,15 @@
 
 #include <misc/explints.hpp>
 
+#include <nlohmann/json.hpp>
+
 struct BanInfo {
 	i64 expiresOn;
 	std::string reason;
 };
+
+void to_json(nlohmann::json&, const BanInfo&);
+void from_json(const nlohmann::json&, BanInfo&);
 
 class BansManager {
 	std::string bansFilePath;

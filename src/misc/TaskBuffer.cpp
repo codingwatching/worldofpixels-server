@@ -8,7 +8,7 @@
 #include <iostream>
 #include <uWS.h>
 
-constexpr auto asyncDeleter = [](uS::Async * a) {
+constexpr auto asyncDeleter = [] (uS::Async * a) {
 	a->close();
 };
 

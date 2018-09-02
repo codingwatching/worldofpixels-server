@@ -178,7 +178,7 @@ void WorldStorage::maybeConvert(i32 x, i32 y) {
 			std::perror(e.c_str());
 		}
 		u8 * ptr = buf.get();
-		result.applyTransform([&result, ptr](u32 x, u32 y) -> RGB_u {
+		result.applyTransform([&result, ptr] (u32 x, u32 y) -> RGB_u {
 			u32 cx = x >> 4;
 			u32 cy = y >> 4;
 			const u32 lookup = 3 * ((cx & 31) + (cy & 31) * 32);

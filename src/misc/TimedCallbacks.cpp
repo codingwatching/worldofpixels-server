@@ -7,12 +7,12 @@ using uS::Timer;
 using uS::Loop;
 using TimerInfo = TimedCallbacks::TimerInfo;
 
-constexpr auto timerDestructor = [](Timer * t) {
+constexpr auto timerDestructor = [] (Timer * t) {
 	t->stop(); // perf hit if not running!
 	t->close();
 };
 
-constexpr auto timerCb = [](Timer * t) {
+constexpr auto timerCb = [] (Timer * t) {
 	TimerInfo * ti = static_cast<TimerInfo*>(t->getData());
 	if (!ti->cb()) {
 		ti->tc.clearTimer(ti->id);

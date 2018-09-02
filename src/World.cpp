@@ -2,7 +2,6 @@
 
 #include <uWS.h>
 
-#include <config.hpp>
 #include <Client.hpp>
 
 #include <misc/TaskBuffer.hpp>
@@ -31,11 +30,7 @@ World::World(std::tuple<std::string, std::string> wsArgs, TaskBuffer& tb)
 : WorldStorage(std::move(wsArgs)),
   tb(tb),
   updateRequired(false),
-  drawRestricted(false) {
-	/*convertProtectionData([this](i32 x, i32 y) {
-		setChunkProtection(x, y, true);
-	});*/
-}
+  drawRestricted(false) { }
 
 World::~World() {
 	std::cout << "World unloaded: " << getWorldName() << std::endl;
@@ -45,7 +40,7 @@ void World::setUnloadFunc(std::function<void()> unloadFunc) {
 	unload = std::move(unloadFunc);
 }
 
-sz_t World::unloadOldChunks(bool force) {
+sz_t World::unloadOldChunks(bool force) { // TODO: handle force flag better
 	sz_t unloadCount = 0;
 
 	//auto oldest = chunks.end();
@@ -71,70 +66,51 @@ sz_t World::unloadOldChunks(bool force) {
 	return unloadCount;
 }
 
-void World::update_all_clients() {
-	for (auto cli : clients) {
-		plupdates.emplace(cli);
-	}
+void World::configurePlayerBuilder(Player::Builder& pb) {
+	pb.setWorld(*this)
+	  .setSpawnPoint(0, 0)
+	  .setPlayerId(ids.getId())
+	  .setPaintBucket({getPixelRate(), 3})
+	  .setChatBucket({4, 6})
+	  .setModifyWorldAllowed(!hasPassword());
 }
 
-void World::add_cli(Client * const cl) {
-	u16 paintrate = getPixelRate();
-
+void World::playerJoined(Player& pl) {
 	if (hasMotd()) {
-		cl->tell(getMotd());
+		pl.tell(getMotd());
 	}
 
-	if (!hasPassword()) {
-		cl->promote(drawRestricted ? Client::NONE : Client::USER, paintrate);
-	} else {
-		cl->tell("[Server] This world has a password set. Use '/pass PASSWORD' to unlock drawing.");
-		cl->promote(Client::NONE, paintrate);
+	if (hasPassword()) {
+		pl.tell("This world has a password set. Use '/pass PASSWORD' to unlock drawing.");
 	}
-	clients.emplace(cl);
-	cl->set_id(ids.getId());
-	update_all_clients();
-	sched_updates();
+
+	players.emplace(std::ref(pl));
+	playerUpdated(pl);
 }
 
-void World::upd_cli(Client * const cl) {
-	plupdates.emplace(cl);
-	sched_updates();
+void World::playerUpdated(Player& pl) {
+	playerUpdates.emplace(std::ref(pl));
+	schedUpdates();
 }
 
-void World::rm_cli(Client * const cl) {
-	plleft.emplace(cl->get_id());
-	clients.erase(cl);
-	plupdates.erase(cl);
-	ids.freeId(cl->get_id());
-	sched_updates();
-	if (!clients.size()) {
-		tryUnload();
+void World::playerLeft(Player& pl) {
+	// XXX: a client could immediately join with the same pid
+	// solution: move player lefts at the beginning of the update array
+	playersLeft.emplace(pl.getPid());
+	ids.freeId(pl.getPid());
+	players.erase(std::ref(pl));
+	playerUpdates.erase(std::ref(pl));
+	schedUpdates();
+	if (players.size() == 0) {
+		tryUnloadWorld();
 	}
 }
 
-Client * World::get_cli(const u32 id) const {
-	for(const auto client : clients){
-		if(id == client->get_id()){
-			return client;
-		}
-	}
-	return nullptr;
-}
-
-Client * World::get_cli(const std::string name) const {
-	for(const auto client : clients){
-		if(name == client->get_nick()){
-			return client;
-		}
-	}
-	return nullptr;
-}
-
-void World::sched_updates() {
+void World::schedUpdates() {
 	updateRequired = true;
 }
 
-void World::send_updates() {
+void World::sendUpdates() {
 	if (!updateRequired) {
 		return;
 	}
@@ -144,9 +120,9 @@ void World::send_updates() {
 	sz_t offs = 2;
 	u32 tmp;
 
-	u8 buf[1 + 1 + plupdates.size() * (sizeof(u32) + sizeof(pinfo_t))
-		+ sizeof(u16) + pxupdates.size() * sizeof(pixupd_t)
-		+ 1 + sizeof(u32) * plleft.size()];
+	u8 buf[1 + 1 + playerUpdates.size() * (sizeof(u32) + sizeof(pinfo_t))
+		+ sizeof(u16) + pixelUpdates.size() * sizeof(pixupd_t)
+		+ 1 + sizeof(u32) * playersLeft.size()];
 	u8 * const upd = &buf[0];
 
 	upd[0] = UPDATE;
@@ -154,52 +130,56 @@ void World::send_updates() {
 	bool pendingUpdates = false;
 
 	tmp = 0;
-	for (auto it = plupdates.begin();;) {
-		if (it == plupdates.end()) {
-			plupdates.clear();
+	for (auto it = playerUpdates.begin();;) {
+		if (it == playerUpdates.end()) {
+			playerUpdates.clear();
 			break;
 		}
 		if(tmp >= WORLD_MAX_PLAYER_UPDATES){
-			plupdates.erase(plupdates.begin(), it);
+			playerUpdates.erase(playerUpdates.begin(), it);
 			pendingUpdates = true;
 			break;
 		}
-		auto client = *it;
-		u32 id = client->get_id();
+		Player& pl = *it;
+		u32 id = pl.getPid();
+		i32 x = pl.getX();
+		i32 y = pl.getY();
 		memcpy((void *)(upd + offs), (void *)&id, sizeof(u32));
 		offs += sizeof(u32);
-		memcpy((void *)(upd + offs), (void *)client->get_pos(), sizeof(pinfo_t));
-		offs += sizeof(pinfo_t);
+		memcpy((void *)(upd + offs), (void *)&x, sizeof(i32));
+		offs += sizeof(i32);
+		memcpy((void *)(upd + offs), (void *)&y, sizeof(i32));
+		offs += sizeof(i32);
 		++it;
 		++tmp;
 	}
 	upd[1] = tmp;
-	tmp = pxupdates.size();
+	tmp = pixelUpdates.size();
 	tmp = tmp >= WORLD_MAX_PIXEL_UPDATES ? WORLD_MAX_PIXEL_UPDATES : tmp;
 	memcpy((void *)(upd + offs), &tmp, sizeof(u16));
 	tmp = 0;
 	offs += sizeof(u16);
-	for(auto& px : pxupdates){
+	for(auto& px : pixelUpdates){
 		memcpy((void *)(upd + offs), &px, sizeof(pixupd_t));
 		offs += sizeof(pixupd_t);
 		if(++tmp >= WORLD_MAX_PIXEL_UPDATES){
 			break;
 		}
 	}
-	pxupdates.clear();
+	pixelUpdates.clear();
 
-	tmp = plleft.size();
+	tmp = playersLeft.size();
 	tmp = tmp >= WORLD_MAX_PLAYER_LEFT_UPDATES ? WORLD_MAX_PLAYER_LEFT_UPDATES : tmp;
 	memcpy((void *)(upd + offs), &tmp, sizeof(u8));
 	tmp = 0;
 	offs += sizeof(u8);
-	for (auto it = plleft.begin();;) {
-		if (it == plleft.end()) {
-			plleft.clear();
+	for (auto it = playersLeft.begin();;) {
+		if (it == playersLeft.end()) {
+			playersLeft.clear();
 			break;
 		}
 		if(tmp >= WORLD_MAX_PLAYER_LEFT_UPDATES){
-			plleft.erase(plleft.begin(), it);
+			playersLeft.erase(playersLeft.begin(), it);
 			pendingUpdates = true;
 			break;
 		}
@@ -212,12 +192,13 @@ void World::send_updates() {
 
 	uWS::WebSocket<uWS::SERVER>::PreparedMessage * prep = uWS::WebSocket<uWS::SERVER>::prepareMessage(
 		(char *)upd, offs, uWS::BINARY, false);
-	for(auto client : clients){
-		client->get_ws()->sendPrepared(prep);
+	for (Player& pl : players) {
+		pl.getClient().getWs()->sendPrepared(prep);
 	}
 	uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
+
 	if (pendingUpdates) {
-		sched_updates();
+		schedUpdates();
 	}
 }
 
@@ -246,7 +227,7 @@ const std::unordered_map<u64, Chunk>::iterator World::get_chunk(const i32 x, con
 }
 
 // returns true if this function ended the request before returning
-bool World::send_chunk(uWS::HttpResponse * res, i32 x, i32 y) {
+bool World::sendChunk(uWS::HttpResponse * res, i32 x, i32 y) {
 	// will load the chunk if unloaded... possible race with nginx if not
 	auto chunk = get_chunk(x, y);
 	if (chunk == chunks.end()) {
@@ -270,7 +251,7 @@ bool World::send_chunk(uWS::HttpResponse * res, i32 x, i32 y) {
 			std::forward_as_tuple(k),
 			std::forward_as_tuple(std::initializer_list<uWS::HttpResponse *>{res})).first;
 
-		auto end = [this, search, &c](TaskBuffer& tb) {
+		auto end = [this, search, &c] (TaskBuffer& tb) {
 			const auto& d = c.getPngData();
 			for (uWS::HttpResponse * res : search->second) {
 				res->end(reinterpret_cast<const char *>(d.data()), d.size());
@@ -279,10 +260,10 @@ bool World::send_chunk(uWS::HttpResponse * res, i32 x, i32 y) {
 			ongoingChunkRequests.erase(search);
 			c.preventUnloading(false);
 			c.unsetCacheOutdatedFlag();
-			tryUnload();
+			tryUnloadWorld();
 		};
 
-		tb.queue([&c, end{std::move(end)}](TaskBuffer& tb) {
+		tb.queue([&c, end{std::move(end)}] (TaskBuffer& tb) {
 			c.updatePngCache();
 			tb.runInMainThread(std::move(end));
 		});
@@ -294,7 +275,7 @@ bool World::send_chunk(uWS::HttpResponse * res, i32 x, i32 y) {
 	return false;
 }
 
-void World::cancelChunkRequest(i32 x, i32 y, uWS::HttpResponse * res) {
+void World::cancelChunkRequest(uWS::HttpResponse * res, i32 x, i32 y) {
 	auto search = ongoingChunkRequests.find(key(x, y));
 	if (search != ongoingChunkRequests.end()) {
 		search->second.erase(res);
@@ -303,40 +284,13 @@ void World::cancelChunkRequest(i32 x, i32 y, uWS::HttpResponse * res) {
 	}
 }
 
-void World::del_chunk(const i32 x, const i32 y, const RGB_u clr){
-	#warning "FIXME"
-	/*Chunk * const c = get_chunk(x, y);
-	if(c){
-		c->clear(clr);
-		uWS::WebSocket<uWS::SERVER>::PreparedMessage * prep = c->get_prepd_data_msg();
-		for(auto client : clients){
-			client->get_ws()->sendPrepared(prep);
-		}
-		uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
-	}*/
-}
-
-void World::paste_chunk(const i32 x, const i32 y, char const * const data){
-	#warning "FIXME"
-	/*Chunk * const c = get_chunk(x, y);
-	if(c){
-		c->set_data(data, 16 * 16 * 3);
-
-		uWS::WebSocket<uWS::SERVER>::PreparedMessage * prep = c->get_prepd_data_msg();
-		for(auto client : clients){
-			client->get_ws()->sendPrepared(prep);
-		}
-		uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
-	}*/
-}
-
-bool World::put_px(const i32 x, const i32 y, const RGB_u clr, u8 placerRank, u32 id) {
+bool World::paint(Player& p, i32 x, i32 y, RGB_u clr) {
 	auto chunk = get_chunk(x >> 9, y >> 9);
 	if (chunk == chunks.end()) {
 		return false;
 	}
 
-	if (isActionPaintAllowed(chunk->second, x, y, placerRank) && chunk->second.setPixel(x & 0x1FF, y & 0x1FF, clr)){
+	if (isActionPaintAllowed(chunk->second, x, y, p) && chunk->second.setPixel(x & 0x1FF, y & 0x1FF, clr)){
 		pxupdates.push_back({id, x, y, clr.r, clr.g, clr.b});
 		sched_updates();
 		return true;
@@ -361,8 +315,8 @@ void World::setChunkProtection(i32 x, i32 y, bool state) {
 		memcpy(&msg[9], (char *)&state, 1);
 		uWS::WebSocket<uWS::SERVER>::PreparedMessage * prep = uWS::WebSocket<uWS::SERVER>::prepareMessage(
 			(char *)&msg[0], sizeof(msg), uWS::BINARY, false);
-		for (auto client : clients) {
-			client->get_ws()->sendPrepared(prep);
+		for (Player& pl : players) {
+			pl.getClient().getWs()->sendPrepared(prep);
 		}
 		uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
 	}
@@ -371,8 +325,8 @@ void World::setChunkProtection(i32 x, i32 y, bool state) {
 void World::broadcast(const std::string& msg) const {
 	uWS::WebSocket<uWS::SERVER>::PreparedMessage * prep = uWS::WebSocket<uWS::SERVER>::prepareMessage(
 		(char *)msg.c_str(), msg.size(), uWS::TEXT, false);
-	for(auto client : clients){
-		client->get_ws()->sendPrepared(prep);
+	for (Player& pl : players) {
+		pl.getClient().getWs()->sendPrepared(prep);
 	}
 	uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
 }
@@ -387,38 +341,18 @@ bool World::save() {
 	return didStuff;
 }
 
-bool World::is_empty() const {
-	return !clients.size();
-}
-
-bool World::is_pass(std::string const& p) {
-	return hasPassword() && p == getPassword();
-}
-
-bool World::mods_enabled() {
-	return getGlobalModeratorsAllowed();
-}
-
-u8 World::get_default_rank() {
-	return drawRestricted ? Client::NONE : Client::USER;
-}
-
-u16 World::get_paintrate() {
-	return getPixelRate();
+sz_t World::getPlayerCount() const {
+	return players.size();
 }
 
 void World::restrictDrawing(bool s) {
 	drawRestricted = s;
 }
 
-std::set<Client *> * World::get_pl() {
-	return &clients;
-}
-
-bool World::isActionPaintAllowed(const Chunk& c, i32 x, i32 y, u8 rank) {
+bool World::isActionPaintAllowed(const Chunk& c, i32 x, i32 y, Player& p) {
 	x >>= 4; x &= 0xF; // divide by 16 and mod 16
 	y >>= 4; y &= 0xF;
-	return c.getProtectionGid(x, y) == 0 || rank >= Client::MODERATOR;
+	return c.getProtectionGid(x, y) == 0 /*|| rank >= Client::MODERATOR*/;
 }
 
 bool World::tryUnloadAllChunks() {
@@ -428,7 +362,7 @@ bool World::tryUnloadAllChunks() {
 	return chunks.size() == 0;
 }
 
-void World::tryUnload() {
+void World::tryUnloadWorld() {
 	if (!clients.size() && tryUnloadAllChunks()) {
 		unload();
 	}

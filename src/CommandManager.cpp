@@ -13,7 +13,7 @@ namespace nlohmann {
 	template<>
 	struct adl_serializer<std::type_index> {
 		static void to_json(nlohmann::json& j, const std::type_index& t) {
-			j = demangle(t.name());
+			j = demangle(t);
 		}
 	};
 }
@@ -47,7 +47,7 @@ bool CommandManager::exec(Player& p, std::string cmdName, nlohmann::json args) {
 		}
 	} catch (const std::exception& e) {
 		r.data = {
-			{"error", demangle(typeid(e).name())},
+			{"error", demangle(typeid(e))},
 			{"reason", e.what()}
 		};
 	}
@@ -71,7 +71,7 @@ void CommandManager::sendAvailableCommands(Player& p) {
 		for (auto& cmd : v.second) {
 			if (cmd->hasPermission(p)) {
 				jsoncmd["overloads"].push_back({
-					{"class_name", demangle(typeid(cmd).name())},
+					{"class_name", demangle(typeid(cmd))},
 					{"info", cmd->getDescription()},
 					{"args", cmd->getArgumentTypes()}
 				});

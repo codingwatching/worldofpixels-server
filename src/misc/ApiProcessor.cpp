@@ -5,7 +5,7 @@
 
 ApiProcessor::ApiProcessor(uWS::Hub& h, std::string defaultRequest) {
 	// one connection can request multiple things before it closes
-	h.onHttpRequest([this, dr{std::move(defaultRequest)}](uWS::HttpResponse * res, uWS::HttpRequest req, char * data, sz_t len, sz_t rem) {
+	h.onHttpRequest([this, dr{std::move(defaultRequest)}] (uWS::HttpResponse * res, uWS::HttpRequest req, char * data, sz_t len, sz_t rem) {
 		RequestStorage * rs = static_cast<RequestStorage*>(res->getHttpSocket()->getUserData());
 		if (!rs) {
 			rs = new RequestStorage;
@@ -25,7 +25,7 @@ ApiProcessor::ApiProcessor(uWS::Hub& h, std::string defaultRequest) {
 		}
 	});
 
-	h.onCancelledHttpRequest([](uWS::HttpResponse * res) {
+	h.onCancelledHttpRequest([] (uWS::HttpResponse * res) {
 		RequestStorage * rs = static_cast<RequestStorage*>(res->getHttpSocket()->getUserData());
 		if (rs && rs->onCancel) {
 			rs->onCancel();
@@ -35,7 +35,7 @@ ApiProcessor::ApiProcessor(uWS::Hub& h, std::string defaultRequest) {
 		res->getHttpSocket()->setUserData(nullptr);
 	});
 
-	h.onHttpDisconnection([](uWS::HttpSocket<uWS::SERVER> * s) {
+	h.onHttpDisconnection([] (uWS::HttpSocket<uWS::SERVER> * s) {
 		// this library is retarded so the disconnection handler is called
 		// before the cancelled requests handler, so i need to do hacky things
 		// if i don't want to use freed memory (there's no request completion handler), cool!

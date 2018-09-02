@@ -13,6 +13,7 @@
 #include <chrono>
 #include <random>
 #include <locale>
+#include <map>
 
 #ifdef __GNUG__
 	#define HAVE_CXA_DEMANGLE
@@ -109,35 +110,46 @@ std::string randomStr(sz_t size) { // WARNING: RNG not thread safe
 }
 
 // trim from start (in place)
-void ltrim(std::string &s) {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](char ch) {
+void ltrim(std::string& s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [] (char ch) {
         return !std::isspace(ch);
     }));
 }
 
 // trim from end (in place)
-void rtrim(std::string &s) {
-    s.erase(std::find_if(s.rbegin(), s.rend(), [](char ch) {
+void rtrim(std::string& s) {
+    s.erase(std::find_if(s.rbegin(), s.rend(), [] (char ch) {
         return !std::isspace(ch);
     }).base(), s.end());
 }
 
 // trim from both ends (in place)
-void trim(std::string &s) {
+void trim(std::string& s) {
     ltrim(s);
     rtrim(s);
 }
 
-std::string demangle(const char * c) {
-#ifdef HAVE_CXA_DEMANGLE
-	int s = -1;
-	std::unique_ptr<char, void(*)(void*)> result(
-		abi::__cxa_demangle(c, NULL, NULL, &s),
-		std::free
-	);
+const std::string& demangle(std::type_index type) { // XXX: also not thread safe
+	static std::map<std::type_index, std::string> cache;
+	auto search = cache.find(type);
 
-	return s == 0 ? result.get() : c;
+	if (search == cache.end()) {
+#ifdef HAVE_CXA_DEMANGLE
+		int s = -1;
+		std::unique_ptr<char, void(*)(void*)> result(
+			abi::__cxa_demangle(type.name(), NULL, NULL, &s),
+			std::free
+		);
+
+		search = cache.emplace(
+			type,
+			s == 0 ? result.get() : type.name()
+		).first;
 #else
-	return c;
+		search = cache.emplace(type, type.name()).first;
 #endif
+	}
+
+	return search->second;
 }
+
