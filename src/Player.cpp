@@ -19,8 +19,14 @@ Player::Player(Client& c, World& w, u32 pid, i32 startX, i32 startY,
   cmdsAllowed(cmds),
   modifyWorldAllowed(mod) {
 	// send player data to the client
+	world.playerJoined(*this);
   	std::cout << "New player on world: " << world.getWorldName() << ", PID: " << playerId << ", UID: " << getUserInfo().uid << std::endl;
 }
+
+Player::Player(const Player::Builder& pb)
+: Player(*pb.cl, *pb.wo, pb.playerId, pb.startX, pb.startY, pb.paintLimiter,
+	pb.chatLimiter, pb.chatAllowed, pb.cmdsAllowed, pb.modifyWorldAllowed) { }
+
 
 Player::~Player() {
 	world.playerLeft(*this);
@@ -169,8 +175,9 @@ Player::Builder& Player::Builder::setModifyWorldAllowed(bool s) {
 	return *this;
 }
 
-Player Player::Builder::build() {
+/*Player Player::Builder::build() {
 	return Player(*cl, *wo, playerId, startX, startY,
 		std::move(paintLimiter), std::move(chatLimiter),
 		chatAllowed, cmdsAllowed, modifyWorldAllowed);
 }
+*/

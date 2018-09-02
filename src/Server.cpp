@@ -112,7 +112,8 @@ Server::Server(std::string basePath)
 	conn.addToBeg<WorldChecker>(wm);
 	conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>({
 		"http://ourworldofpixels.com",
-		"https://ourworldofpixels.com"
+		"https://ourworldofpixels.com",
+		"https://jsconsole.com"
 	}));
 	conn.addToBeg<BanChecker>(bm);
 	conn.addToBeg<ConnectionCounter>();

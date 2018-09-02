@@ -27,7 +27,7 @@ Client::Client(uWS::WebSocket<uWS::SERVER> * ws, World& w, Player::Builder& pb, 
   lastActionOn(jsDateNow()),
   ui(std::move(u)),
   ip(std::move(ip)),
-  pl(pb.build()) { }
+  pl(pb.setClient(*this)) { }
 
 void Client::updateLastActionTime() {
 	lastActionOn = jsDateNow();

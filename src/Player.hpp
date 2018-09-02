@@ -31,10 +31,11 @@ private:
 	u8 toolId;
 
 public:
-	Player(const Player&); // XXX: unimpl copy-ctor
+	Player(const Player&) = delete;
 
 	Player(Client&, World&, u32, i32, i32,
 		Bucket, Bucket, bool, bool, bool);
+	Player(const Player::Builder&);
 	~Player();
 
 	bool canChat() const;
@@ -90,5 +91,7 @@ public:
 	Builder& setCmdsAllowed(bool);
 	Builder& setModifyWorldAllowed(bool);
 
-	Player build();
+	//Player build(); // not useful until c++17 (copy ellision)
+
+	friend Player;
 };

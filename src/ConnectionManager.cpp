@@ -164,6 +164,16 @@ void ConnectionManager::handleEnd(IncomingConnection& ic) {
 		}
 	}
 
+	{
+		std::string s(nlohmann::json({
+			{ "t", "auth_ok" },
+			{ "world", ic.ci.world },
+			{ "user", ic.ci.ui }
+		}).dump());
+
+		ic.ws->send(s.data(), s.size(), uWS::TEXT);
+	}
+
 	Client * cl = clientTransformer(ic);
 	ic.ws->setUserData(cl);
 	pending.erase(ic.it);
