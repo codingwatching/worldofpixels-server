@@ -31,7 +31,7 @@ nlohmann::json ConnectionCounter::getPublicInfo() {
 	return {
 		{"total", total},
 		{"totalChecked", totalChecked},
-		{"currentChecking", currentChecking}
+		{"currentChecking", currentChecking},
 		{"currentActive", currentActive}
 	};
 }

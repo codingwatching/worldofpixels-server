@@ -2,7 +2,7 @@
 
 bool ConnectionProcessor::isAsync(IncomingConnection&) { return false; }
 
-bool ConnectionProcessor::preCheck(IncomingConnection&) { return true; }
+bool ConnectionProcessor::preCheck(IncomingConnection&, uWS::HttpRequest&) { return true; }
 void ConnectionProcessor::asyncCheck(IncomingConnection&, std::function<void(bool)>) { }
 bool ConnectionProcessor::endCheck(IncomingConnection&) { return true; }
 

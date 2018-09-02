@@ -11,6 +11,14 @@
 #include <utility>
 #include <algorithm>
 
+bool operator  <(std::reference_wrapper<Player> a, std::reference_wrapper<Player> b) {
+	return a.get() < b.get();
+}
+
+bool operator ==(std::reference_wrapper<Player> a, std::reference_wrapper<Player> b) {
+	return a.get() == b.get();
+}
+
 // two 32 bit signed ints to one unsiged 64 bit int
 u64 key(i32 x, i32 y) {
 	union {
@@ -285,6 +293,14 @@ void World::cancelChunkRequest(uWS::HttpResponse * res, i32 x, i32 y) {
 	}
 }
 
+void World::chat(Player& p, const std::string& s) {
+	broadcast(nlohmann::json({
+		{ "t", "chat" },
+		{ "user", p.getUserInfo() },
+		{ "msg", s }
+	}).dump());
+}
+
 bool World::paint(Player& p, i32 x, i32 y, RGB_u clr) {
 	auto chunk = get_chunk(x >> 9, y >> 9);
 	if (chunk == chunks.end()) {
@@ -292,7 +308,7 @@ bool World::paint(Player& p, i32 x, i32 y, RGB_u clr) {
 	}
 
 	if (isActionPaintAllowed(chunk->second, x, y, p) && chunk->second.setPixel(x & 0x1FF, y & 0x1FF, clr)){
-		pxupdates.push_back({p.getPid(), x, y, clr.r, clr.g, clr.b});
+		pixelUpdates.push_back({p.getPid(), x, y, clr.r, clr.g, clr.b});
 		schedUpdates();
 		return true;
 	}
@@ -309,7 +325,7 @@ void World::setChunkProtection(i32 x, i32 y, bool state) {
 	// x and y are 16x16 aligned
 	chunk->second.setProtectionGid(x & 0x1F, y & 0x1F, state ? 1 : 0);
 
-	if (clients.size() != 0) {
+	if (players.size() != 0) {
 		u8 msg[10] = {CHUNK_PROTECTED};
 		memcpy(&msg[1], (char *)&x, 4);
 		memcpy(&msg[5], (char *)&y, 4);

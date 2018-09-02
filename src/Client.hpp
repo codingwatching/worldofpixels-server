@@ -6,6 +6,8 @@
 #include <misc/fwd_uWS.h>
 #include <misc/explints.hpp>
 
+#include <nlohmann/json.hpp>
+
 #include <Player.hpp>
 
 struct UserInfo {
@@ -16,6 +18,8 @@ struct UserInfo {
 	UserInfo();
 	UserInfo(u64, std::string);
 };
+
+void to_json(nlohmann::json&, const UserInfo&);
 
 class Client {
 	uWS::WebSocket<true> * const ws;

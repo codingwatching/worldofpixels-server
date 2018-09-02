@@ -62,6 +62,7 @@ public:
 	void send(const nlohmann::json&);
 
 	bool operator ==(const Player&) const;
+	bool operator  <(const Player&) const;
 };
 
 class Player::Builder {

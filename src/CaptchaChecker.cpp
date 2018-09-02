@@ -25,7 +25,7 @@ void CaptchaChecker::disable() {
 	enabledForEveryone = false;
 }
 
-bool CaptchaChecker::isCaptchaRequiredFor(IncomingConnection& ic) {
+bool CaptchaChecker::isCaptchaEnabledFor(IncomingConnection& ic) {
 	return enabledForEveryone || (ic.ci.ui.isGuest && enabledForGuests);
 }
 
@@ -39,14 +39,14 @@ bool CaptchaChecker::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
 	}
 
 	auto search = ic.args.find("captcha");
-	if (search == ic.args.end() || search->second.length > 2048) {
+	if (search == ic.args.end() || search->second.size() > 2048) {
 		return false;
 	}
 
 	return true;
 }
 
-void CaptchaChecker::asyncCheck(IncomingConnection& ic, std::function<void(bool> cb) {
+void CaptchaChecker::asyncCheck(IncomingConnection& ic, std::function<void(bool)> cb) {
 	hcli.addRequest("https://www.google.com/recaptcha/api/siteverify", {
 		{"secret", CAPTCHA_API_KEY},
 		{"remoteip", ic.ip},

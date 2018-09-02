@@ -16,6 +16,12 @@ UserInfo::UserInfo(u64 uid, std::string s)
   username(std::move(s)),
   isGuest(false) { }
 
+void to_json(nlohmann::json& j, const UserInfo& ui) {
+	j["uid"] = ui.uid;
+	j["username"] = ui.username;
+	j["guest"] = ui.isGuest;
+}
+
 Client::Client(uWS::WebSocket<uWS::SERVER> * ws, World& w, Player::Builder& pb, UserInfo u, std::string ip)
 : ws(ws),
   lastActionOn(jsDateNow()),

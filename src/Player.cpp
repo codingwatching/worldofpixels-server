@@ -101,8 +101,12 @@ void Player::send(const nlohmann::json& j) {
 }
 
 bool Player::operator ==(const Player& p) const {
-	// compare client classes, which will compare socket pointers
-	return cl == p.cl;
+	// XXX: why would you compare players from different worlds?
+	return playerId == p.playerId;
+}
+
+bool Player::operator  <(const Player& p) const {
+	return playerId < p.playerId;
 }
 
 

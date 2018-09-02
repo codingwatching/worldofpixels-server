@@ -80,7 +80,7 @@ sz_t WorldManager::unloadOldChunks() {
 
 void WorldManager::tickWorlds() {
 	for (auto& w : worlds) {
-		w.second.send_updates();
+		w.second.sendUpdates();
 	}
 }
 

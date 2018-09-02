@@ -7,5 +7,5 @@ BanChecker::BanChecker(BansManager& bm)
 : bm(bm) { }
 
 bool BanChecker::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
-	return bm.isBanned(ic.ip);
+	return !bm.isBanned(ic.ip);
 }

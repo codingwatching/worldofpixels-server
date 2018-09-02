@@ -16,6 +16,8 @@ public:
 	void enableForEveryone();
 	void disable();
 
+	bool isCaptchaEnabledFor(IncomingConnection&);
+
 	bool isAsync(IncomingConnection&);
 
 	bool preCheck(IncomingConnection&, uWS::HttpRequest&);

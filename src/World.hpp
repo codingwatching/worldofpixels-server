@@ -71,7 +71,7 @@ public:
 	void restrictDrawing(bool);
 
 private:
-	bool isActionPaintAllowed(const Chunk&, i32 x, i32 y, u8 rank); // to be changed
+	bool isActionPaintAllowed(const Chunk&, i32 x, i32 y, Player&);
 	bool tryUnloadAllChunks();
 	void tryUnloadWorld();
 };
