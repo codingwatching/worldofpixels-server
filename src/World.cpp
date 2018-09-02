@@ -3,6 +3,7 @@
 #include <uWS.h>
 
 #include <Client.hpp>
+#include <config.hpp>
 
 #include <misc/TaskBuffer.hpp>
 
@@ -291,8 +292,8 @@ bool World::paint(Player& p, i32 x, i32 y, RGB_u clr) {
 	}
 
 	if (isActionPaintAllowed(chunk->second, x, y, p) && chunk->second.setPixel(x & 0x1FF, y & 0x1FF, clr)){
-		pxupdates.push_back({id, x, y, clr.r, clr.g, clr.b});
-		sched_updates();
+		pxupdates.push_back({p.getPid(), x, y, clr.r, clr.g, clr.b});
+		schedUpdates();
 		return true;
 	}
 
@@ -363,7 +364,7 @@ bool World::tryUnloadAllChunks() {
 }
 
 void World::tryUnloadWorld() {
-	if (!clients.size() && tryUnloadAllChunks()) {
+	if (!players.size() && tryUnloadAllChunks()) {
 		unload();
 	}
 }

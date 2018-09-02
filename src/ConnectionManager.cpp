@@ -77,7 +77,9 @@ void ConnectionManager::forEachProcessor(std::function<void(ConnectionProcessor&
 
 void ConnectionManager::handleIncoming(uWS::WebSocket<uWS::SERVER> * ws,
 		std::map<std::string, std::string> args, uWS::HttpRequest req, std::string ip) {
-	auto ic = pending.emplace_back(UserInfo(), ws, std::move(args), processors.begin(), pending.end(), std::move(ip), false);
+	// can be optimized
+	pending.push_front({ConnectionInfo(), ws, std::move(args), processors.begin(), pending.end(), std::move(ip), false});
+	auto ic = pending.begin();
 	ic->it = ic;
 
 	for (auto it = processors.begin(); it != processors.end(); ++it) {
@@ -184,7 +186,7 @@ void ConnectionManager::handleDisconnect(IncomingConnection& ic, bool all) {
 
 void ConnectionManager::handleDisconnect(Client& c){
 	ClosedConnection cc(c);
-	for (auto it = processors.begin(); it != end; ++it) {
-		(*it)->disconnected(cc);
+	for (auto& p : processors) {
+		p->disconnected(cc);
 	}
 }
