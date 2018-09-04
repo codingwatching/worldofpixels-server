@@ -40,6 +40,7 @@ struct IncomingConnection {
 };
 
 class ConnectionManager {
+	uWS::Group<true>& defaultGroup;
 	std::forward_list<std::unique_ptr<ConnectionProcessor>> processors;
 	std::list<IncomingConnection> pending;
 	std::map<std::type_index, std::reference_wrapper<ConnectionProcessor>> processorTypeMap;
@@ -57,6 +58,7 @@ public:
 	ProcessorType& getProcessor();
 
 	void forEachProcessor(std::function<void(ConnectionProcessor&)>);
+	void forEachClient(std::function<void(Client&)>);
 
 private:
 	void handleIncoming(uWS::WebSocket<true> *, std::map<std::string, std::string>, uWS::HttpRequest, std::string ip);

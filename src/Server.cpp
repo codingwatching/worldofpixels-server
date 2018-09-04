@@ -12,6 +12,7 @@
 #include <WorldChecker.hpp>
 #include <HeaderChecker.hpp>
 #include <CaptchaChecker.hpp>
+#include <ProxyChecker.hpp>
 
 #include <misc/utils.hpp>
 
@@ -108,7 +109,8 @@ Server::Server(std::string basePath)
 		return ApiProcessor::OK;
 	});
 
-	conn.addToBeg<CaptchaChecker>(hcli).disable();
+	conn.addToBeg<ProxyChecker>(hcli, tc).setState(ProxyChecker::State::OFF);
+	conn.addToBeg<CaptchaChecker>(hcli).setState(CaptchaChecker::State::OFF);
 	conn.addToBeg<WorldChecker>(wm);
 	conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>({
 		"http://ourworldofpixels.com",
@@ -124,87 +126,6 @@ Server::Server(std::string basePath)
 		w.configurePlayerBuilder(pb);
 		return new Client(ic.ws, w, pb, std::move(ic.ci.ui), std::move(ic.ip));
 	});
-
-#if 0
-	h.onConnection([this] (uWS::WebSocket<uWS::SERVER> * ws, uWS::HttpRequest req) {
-		auto search = conns.find(si->ip);
-		if (search == conns.end()) {
-			conns[si->ip] = 1;
-		} else if (++search->second > maxconns) {
-			std::string m("Sorry, but you have reached the maximum number of simultaneous connections, (" + std::to_string(maxconns) + ").");
-			ws->send(m.c_str(), m.size(), uWS::TEXT);
-			ws->close();
-			return;
-		}
-
-		/*if (proxy_lock && !whitelisted && proxyquery_checking.find(si->ip) == proxyquery_checking.end()) {
-			proxyquery_checking.emplace(si->ip);
-			std::string params("ip=" + si->ip);
-			params += "&flags=m";
-			params += CONTACT_PARAM;
-			auto * tskbuf = &async_tasks;
-			Server * sv = this;
-			std::string ipcopy(si->ip);
-			hcli.queueRequest({
-				"http://check.getipintel.net/check.php",
-				params,
-				[tskbuf, ipcopy, sv]
-				(CURL * const c, const CURLcode cc, const std::string & buf) {
-					long httpcode = -1;
-					curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &httpcode);
-					if (cc != CURLE_OK || httpcode == 429) {
-						std::cout << "Error occurred when checking for proxy connection, HTTP code: "
-							<< httpcode << ", buffer: " << buf << std::endl;
-						if (httpcode == 429) { // Query limit exceeded, disable the proxy check.
-							tskbuf->queueTask([sv] {
-								std::cout << "Disabling proxy check, and enabling captcha protection..." << std::endl;
-								sv->admintell("DEVProxy query limit exceeded! (API returned error 429)");
-								sv->admintell("DEVDisabling proxy checking, and enabling CAPTCHA... (if not already on)");
-								sv->set_proxycheck(false);
-								sv->set_captcha_protection(true);
-							});
-						} else {
-							tskbuf->queueTask([sv, ipcopy, httpcode, buf, cc] {
-								sv->admintell("Unknown error occurred in proxy checking API, HTTP Code: " + std::to_string(httpcode) + ", response: " + buf);
-								sv->admintell("libCURL err -> " + std::string(curl_easy_strerror(cc)));
-								sv->proxyquery_checking.erase(ipcopy);
-							});
-						}
-						tskbuf->runTasks();
-						return;
-					}
-					i32 code = -7;
-					try {
-						code = std::stoi(buf);
-					} catch(const std::invalid_argument & e) { }
-					  catch(const std::out_of_range& e) { }
-					tskbuf->queueTask([sv, code, ipcopy] {
-						sv->proxyquery_checking.erase(ipcopy);
-						if (code < 0 && code != -3) {
-							std::string e("Proxy check API returned an error: " + std::to_string(code) + ", for IP: " + ipcopy);
-							puts(e.c_str());
-							sv->admintell("DEV" + e, true);
-							if (code == -5 || code == -6) {
-								sv->set_proxycheck(false);
-							}
-							return;
-						}
-						switch (code) {
-							case 1:
-								sv->banip(ipcopy, -1);
-								break;
-							case 0:
-							case -3: // Unroutable address / private address
-								sv->whitelistip(ipcopy);
-								break;
-						}
-					});
-					tskbuf->runTasks();
-				}
-			});
-		}*/
-	});
-#endif
 
 	h.onMessage([this] (uWS::WebSocket<uWS::SERVER> * ws, const char * msg, sz_t len, uWS::OpCode oc) {
 		Client * cl = static_cast<Client *>(ws->getUserData());

@@ -17,7 +17,8 @@ ClosedConnection::ClosedConnection(IncomingConnection& ic)
   ip(std::move(ic.ip)),
   wasClient(false) { }
 
-ConnectionManager::ConnectionManager(uWS::Hub& h, std::string protoName) {
+ConnectionManager::ConnectionManager(uWS::Hub& h, std::string protoName)
+: defaultGroup(h.getDefaultGroup<uWS::SERVER>()) {
 	h.onConnection([this, pn{std::move(protoName)}] (uWS::WebSocket<uWS::SERVER> * ws, uWS::HttpRequest req) {
 		// Maybe this could be moved on the upgrade handler, somehow
 		uWS::Header argHead(req.getHeader("sec-websocket-protocol", 22));
@@ -69,6 +70,14 @@ void ConnectionManager::onSocketChecked(std::function<Client*(IncomingConnection
 	clientTransformer = std::move(f);
 }
 
+void ConnectionManager::forEachClient(std::function<void(Client&)> f) {
+	defaultGroup.forEach([&f] (uWS::WebSocket<uWS::SERVER> * ws) {
+		if (Client * c = static_cast<Client *>(ws->getUserData())) {
+			f(*c);
+		}
+	});
+}
+
 void ConnectionManager::forEachProcessor(std::function<void(ConnectionProcessor&)> f) {
 	for (auto& p : processors) {
 		f(*p.get());
@@ -84,15 +93,14 @@ void ConnectionManager::handleIncoming(uWS::WebSocket<uWS::SERVER> * ws,
 
 	for (auto it = processors.begin(); it != processors.end(); ++it) {
 		if (!(*it)->preCheck(*ic, req)) {
-			nlohmann::json j = {
+			std::string s(nlohmann::json({
 				{"t", "auth_error"},
 				{"at", "pre_check"},
 				{"in", demangle(typeid(*(*it).get()))}
-			};
-
-			std::string s(j.dump());
+			}).dump());
 			ws->send(s.data(), s.size(), uWS::TEXT);
-			ic->nextProcessor = it;
+
+			ic->nextProcessor = std::next(it);
 			handleFail(*ic);
 			handleDisconnect(*ic, false);
 			return;
@@ -107,11 +115,10 @@ void ConnectionManager::handleAsync(IncomingConnection& ic) {
 		auto& pr = *ic.nextProcessor++;
 		if (pr->isAsync(ic)) {
 			{
-				nlohmann::json j = {
+				std::string s(nlohmann::json({
 					{"t", "auth_progress"},
 					{"on", demangle(typeid(*pr.get()))}
-				};
-				std::string s(j.dump());
+				}).dump());
 				ic.ws->send(s.data(), s.size(), uWS::TEXT);
 			}
 			// not safe to use ic after calling callback
@@ -123,13 +130,13 @@ void ConnectionManager::handleAsync(IncomingConnection& ic) {
 
 				// is true if socket closed
 				if (!ic.cancelled) {
-					nlohmann::json j = {
+					std::string s(nlohmann::json({
 						{"t", "auth_error"},
 						{"at", "async_check"},
 						{"in", demangle(typeid(*pr.get()))}
-					};
-					std::string s(j.dump());
+					}).dump());
 					ic.ws->send(s.data(), s.size(), uWS::TEXT);
+
 					handleFail(ic);
 				}
 
@@ -150,14 +157,13 @@ void ConnectionManager::handleFail(IncomingConnection& ic) {
 void ConnectionManager::handleEnd(IncomingConnection& ic) {
 	for (auto& p : processors) {
 		if (!p->endCheck(ic)) {
-			nlohmann::json j = {
+			std::string s(nlohmann::json({
 				{"t", "auth_error"},
 				{"at", "end_check"},
 				{"in", demangle(typeid(*p.get()))}
-			};
-
-			std::string s(j.dump());
+			}).dump());
 			ic.ws->send(s.data(), s.size(), uWS::TEXT);
+
 			handleFail(ic);
 			handleDisconnect(ic, true);
 			return;

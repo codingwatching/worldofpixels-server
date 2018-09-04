@@ -7,26 +7,32 @@
 
 #include <iostream>
 
+static void to_json(nlohmann::json& j, const CaptchaChecker::State s) {
+	switch (static_cast<int>(s)) { // nice switch, c++
+		case static_cast<int>(CaptchaChecker::State::ALL):
+			j = "ALL";
+			break;
+
+		case static_cast<int>(CaptchaChecker::State::GUESTS):
+			j = "GUESTS";
+			break;
+
+		case static_cast<int>(CaptchaChecker::State::OFF):
+			j = "OFF";
+			break;
+	}
+}
+
 CaptchaChecker::CaptchaChecker(AsyncHttp& hcli)
 : hcli(hcli),
-  enabledForGuests(true),
-  enabledForEveryone(false) { }
+  state(State::GUESTS) { }
 
-void CaptchaChecker::enableForGuests() {
-	enabledForGuests = true;
-}
-
-void CaptchaChecker::enableForEveryone() {
-	enabledForEveryone = true;
-}
-
-void CaptchaChecker::disable() {
-	enabledForGuests = false;
-	enabledForEveryone = false;
+void CaptchaChecker::setState(State s) {
+	state = s;
 }
 
 bool CaptchaChecker::isCaptchaEnabledFor(IncomingConnection& ic) {
-	return enabledForEveryone || (ic.ci.ui.isGuest && enabledForGuests);
+	return state == State::ALL || (ic.ci.ui.isGuest && state == State::GUESTS);
 }
 
 bool CaptchaChecker::isAsync(IncomingConnection& ic) {
@@ -39,7 +45,7 @@ bool CaptchaChecker::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
 	}
 
 	auto search = ic.args.find("captcha");
-	if (search == ic.args.end() || search->second.size() > 2048) {
+	if (search == ic.args.end() || search->second.size() > 4096) {
 		return false;
 	}
 
@@ -84,8 +90,5 @@ void CaptchaChecker::asyncCheck(IncomingConnection& ic, std::function<void(bool)
 }
 
 nlohmann::json CaptchaChecker::getPublicInfo() {
-	return {
-		{ "enabledForGuests", enabledForGuests },
-		{ "enabledForEveryone", enabledForEveryone }
-	};
+	return state;
 }
