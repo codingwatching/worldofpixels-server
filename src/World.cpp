@@ -1,8 +1,7 @@
 #include "World.hpp"
 
-#include <uWS.h>
-
 #include <Client.hpp>
+#include <UserInfo.hpp>
 #include <config.hpp>
 
 #include <misc/TaskBuffer.hpp>
@@ -10,6 +9,9 @@
 #include <iostream>
 #include <utility>
 #include <algorithm>
+
+#include <uWS.h>
+#include <nlohmann/json.hpp>
 
 bool operator  <(std::reference_wrapper<Player> a, std::reference_wrapper<Player> b) {
 	return a.get() < b.get();
@@ -211,41 +213,42 @@ void World::sendUpdates() {
 	}
 }
 
-const std::unordered_map<u64, Chunk>::iterator World::get_chunk(const i32 x, const i32 y, bool create) {
-	if (x > 0x7FFF || y > 0x7FFF
-	 || x < ~0x7FFF || y < ~0x7FFF) {
-		return chunks.end();
-	}
+bool World::verifyChunkPos(Chunk::Pos x, Chunk::Pos y) {
+	return x <= border && y <= border
+		&& x >= ~border && y >= ~border;
+}
+
+Chunk& World::getChunk(Chunk::Pos x, Chunk::Pos y) {
 	auto search = chunks.find(key(x, y));
 	if (search == chunks.end()) {
-		if (create) {
-			WorldStorage::maybeConvert(x, y);
-			WorldStorage& ws = *this;
-			search = chunks.emplace(std::piecewise_construct,
-				std::forward_as_tuple(key(x, y)),
-				std::forward_as_tuple(x, y, ws)).first;
-			if (chunks.size() > 64) {
-				search->second.preventUnloading(true);
-				unloadOldChunks(true);
-				search->second.preventUnloading(false);
-			}
+		WorldStorage::maybeConvert(x, y);
+
+		search = chunks.emplace(std::piecewise_construct,
+			std::forward_as_tuple(key(x, y)),
+			std::forward_as_tuple(x, y, *this)).first;
+
+		if (chunks.size() > 64) {
+			search->second.preventUnloading(true);
+			unloadOldChunks(true);
+			search->second.preventUnloading(false);
 		}
 	}
 
-	return search;
+	return search->second;
 }
 
 // returns true if this function ended the request before returning
-bool World::sendChunk(uWS::HttpResponse * res, i32 x, i32 y) {
-	// will load the chunk if unloaded... possible race with nginx if not
-	auto chunk = get_chunk(x, y);
-	if (chunk == chunks.end()) {
+bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse * res) {
+	if (!verifyChunkPos(x, y)) {
 		res->end();
 		return true;
 	}
 
-	if (!chunk->second.isPngCacheOutdated()) {
-		const auto& d = chunk->second.getPngData();
+	// will load the chunk if unloaded... possible race with nginx if not
+	Chunk& chunk = getChunk(x, y);
+
+	if (!chunk.isPngCacheOutdated()) {
+		const auto& d = chunk.getPngData();
 		res->end(reinterpret_cast<const char *>(d.data()), d.size());
 		return true;
 	}
@@ -253,27 +256,26 @@ bool World::sendChunk(uWS::HttpResponse * res, i32 x, i32 y) {
 	u64 k = key(x, y);
 	auto search = ongoingChunkRequests.find(k);
 	if (search == ongoingChunkRequests.end()) {
-		Chunk& c = chunk->second;
-		c.preventUnloading(true);
+		chunk.preventUnloading(true);
 
 		search = ongoingChunkRequests.emplace(std::piecewise_construct,
 			std::forward_as_tuple(k),
 			std::forward_as_tuple(std::initializer_list<uWS::HttpResponse *>{res})).first;
 
-		auto end = [this, search, &c] (TaskBuffer& tb) {
-			const auto& d = c.getPngData();
+		auto end = [this, search, &chunk] (TaskBuffer& tb) {
+			const auto& d = chunk.getPngData();
 			for (uWS::HttpResponse * res : search->second) {
 				res->end(reinterpret_cast<const char *>(d.data()), d.size());
 			}
 
 			ongoingChunkRequests.erase(search);
-			c.preventUnloading(false);
-			c.unsetCacheOutdatedFlag();
+			chunk.preventUnloading(false);
+			chunk.unsetCacheOutdatedFlag();
 			tryUnloadWorld();
 		};
 
-		tb.queue([&c, end{std::move(end)}] (TaskBuffer& tb) {
-			c.updatePngCache();
+		tb.queue([&chunk, end{std::move(end)}] (TaskBuffer& tb) {
+			chunk.updatePngCache();
 			tb.runInMainThread(std::move(end));
 		});
 	} else {
@@ -284,7 +286,7 @@ bool World::sendChunk(uWS::HttpResponse * res, i32 x, i32 y) {
 	return false;
 }
 
-void World::cancelChunkRequest(uWS::HttpResponse * res, i32 x, i32 y) {
+void World::cancelChunkRequest(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse * res) {
 	auto search = ongoingChunkRequests.find(key(x, y));
 	if (search != ongoingChunkRequests.end()) {
 		search->second.erase(res);
@@ -302,7 +304,9 @@ void World::chat(Player& p, const std::string& s) {
 }
 
 bool World::paint(Player& p, i32 x, i32 y, RGB_u clr) {
-	auto chunk = get_chunk(x >> 9, y >> 9);
+	Chunk::Pos cx = x / border;
+	fix this /////////////////
+	auto chunk = getChunk(x >> 9, y >> 9);
 	if (chunk == chunks.end()) {
 		return false;
 	}
@@ -317,7 +321,7 @@ bool World::paint(Player& p, i32 x, i32 y, RGB_u clr) {
 }
 
 void World::setChunkProtection(i32 x, i32 y, bool state) {
-	auto chunk = get_chunk(x >> 5, y >> 5); // div by 32
+	auto chunk = getChunk(x >> 5, y >> 5); // div by 32
 	if (chunk == chunks.end()) {
 		return;
 	}

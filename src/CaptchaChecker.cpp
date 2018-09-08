@@ -7,6 +7,8 @@
 
 #include <iostream>
 
+#include <nlohmann/json.hpp>
+
 static void to_json(nlohmann::json& j, const CaptchaChecker::State s) {
 	switch (static_cast<int>(s)) { // nice switch, c++
 		case static_cast<int>(CaptchaChecker::State::ALL):

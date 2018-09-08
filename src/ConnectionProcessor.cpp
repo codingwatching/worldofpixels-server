@@ -1,5 +1,7 @@
 #include "ConnectionProcessor.hpp"
 
+#include <nlohmann/json.hpp>
+
 bool ConnectionProcessor::isAsync(IncomingConnection&) { return false; }
 
 bool ConnectionProcessor::preCheck(IncomingConnection&, uWS::HttpRequest&) { return true; }

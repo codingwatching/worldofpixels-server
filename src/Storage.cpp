@@ -6,8 +6,6 @@
 #include <memory>
 #include <fstream>
 #include <cstdio>
-//#include <vector>
-//#include <map>
 #include <glob.h>
 #include <cstdlib>
 #include <array>
@@ -16,7 +14,6 @@
 #include <misc/rle.hpp>
 #include <misc/BufferHelper.hpp>
 #include <misc/utils.hpp>
-#include <config.hpp>
 
 bool operator<(const twoi32& a, const twoi32& b) {
 	return a.pos < b.pos;
@@ -209,7 +206,7 @@ void WorldStorage::maybeConvert(i32 x, i32 y) {
 		result.setChunkWriter("woPp", [&prtect] {
 			return rle::compress(prtect.data(), prtect.size());
 		});
-		result.writeFile(path);
+		result.writeFile(path); // scoped array, can't fall through
 		return;
 	}
 	result.writeFile(path);

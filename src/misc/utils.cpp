@@ -129,11 +129,14 @@ void trim(std::string& s) {
     rtrim(s);
 }
 
-const std::string& demangle(std::type_index type) { // XXX: also not thread safe
-	static std::map<std::type_index, std::string> cache;
-	auto search = cache.find(type);
+// could go in a different file
+std::map<std::type_index, std::string> typeCache;
+std::map<std::string, std::type_index> typeMap;
 
-	if (search == cache.end()) {
+const std::string& demangle(std::type_index type) { // XXX: also not thread safe
+	auto search = typeCache.find(type);
+
+	if (search == typeCache.end()) {
 #ifdef HAVE_CXA_DEMANGLE
 		int s = -1;
 		std::unique_ptr<char, void(*)(void*)> result(
@@ -141,15 +144,17 @@ const std::string& demangle(std::type_index type) { // XXX: also not thread safe
 			std::free
 		);
 
-		search = cache.emplace(
-			type,
-			s == 0 ? result.get() : type.name()
-		).first;
+		std::string name(s == 0 ? result.get() : type.name());
 #else
-		search = cache.emplace(type, type.name()).first;
+		std::string name(type.name());
 #endif
+		search = typeCache.emplace(type, name).first;
+		typeMap.emplace(name, type);
 	}
 
 	return search->second;
 }
 
+std::type_index strToType(const std::string& s) {
+	return typeMap.at(s); // throws if not found
+}

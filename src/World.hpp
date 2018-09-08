@@ -16,13 +16,19 @@
 #include <map>
 #include <vector>
 #include <tuple>
+#include <limits>
 
 class TaskBuffer;
 class Client;
-class Player;
 
 class World : public WorldStorage {
-	IdSys ids;
+public:
+	using PixelPos = i32;
+
+	static constexpr Chunk::Pos border = std::numeric_limits<PixelPos>::max() / Chunk::size;
+
+private:
+	IdSys<Player::Id> ids;
 	TaskBuffer& tb; // for http chunk requests
 	bool updateRequired;
 	bool drawRestricted;
@@ -35,7 +41,7 @@ class World : public WorldStorage {
 
 	std::vector<pixupd_t> pixelUpdates;
 	std::set<std::reference_wrapper<Player>> playerUpdates;
-	std::set<u32> playersLeft; // this could be a vector
+	std::set<Player::Id> playersLeft; // this might be removed
 
 public:
 	World(std::tuple<std::string, std::string>, TaskBuffer&);
@@ -55,10 +61,13 @@ public:
 
 	sz_t unloadOldChunks(bool force = false);
 
-	const std::unordered_map<u64, Chunk>::iterator get_chunk(i32 x, i32 y, bool create = true);
-	void setChunkProtection(i32 x, i32 y, bool state);
-	bool sendChunk(uWS::HttpResponse *, i32 x, i32 y);
-	void cancelChunkRequest(uWS::HttpResponse *, i32 x, i32 y);
+	static bool verifyChunkPos(Chunk::Pos x, Chunk::Pos y);
+	Chunk& getChunk(Chunk::Pos x, Chunk::Pos y);
+
+	bool sendChunk(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse *);
+	void cancelChunkRequest(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse *);
+
+	void setChunkProtection(Chunk::Pos x, Chunk::Pos y, bool state);
 
 	bool paint(Player&, i32 x, i32 y, RGB_u);
 
@@ -68,6 +77,7 @@ public:
 	bool save();
 
 	sz_t getPlayerCount() const;
+
 	void restrictDrawing(bool);
 
 private:

@@ -6,6 +6,7 @@
 #include <misc/utils.hpp>
 
 #include <Client.hpp>
+#include <ConnectionProcessor.hpp>
 
 ClosedConnection::ClosedConnection(Client& c)
 : ws(c.getWs()),

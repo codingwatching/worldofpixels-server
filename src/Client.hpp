@@ -6,20 +6,8 @@
 #include <misc/fwd_uWS.h>
 #include <misc/explints.hpp>
 
-#include <nlohmann/json.hpp>
-
 #include <Player.hpp>
-
-struct UserInfo {
-	const u64 uid;
-	std::string username;
-	bool isGuest;
-
-	UserInfo();
-	UserInfo(u64, std::string);
-};
-
-void to_json(nlohmann::json&, const UserInfo&);
+#include <UserInfo.hpp>
 
 class Client {
 	uWS::WebSocket<true> * const ws;
@@ -33,6 +21,7 @@ public:
 
 	void updateLastActionTime();
 
+	bool inactiveKickEnabled() const;
 	i64 getLastActionTime() const;
 	const std::string& getIp() const;
 	uWS::WebSocket<true> * getWs();

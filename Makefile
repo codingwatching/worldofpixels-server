@@ -20,7 +20,7 @@ LIB_FILES = $(UWS)/libuWS.a
 
 CPPFLAGS += -I ./src/
 CPPFLAGS += -I $(UWS)/src/
-CPPFLAGS += -I $(JSON)/single_include/
+CPPFLAGS += -I $(JSON)/include/
 LDFLAGS  += -L $(UWS)/
 
 LIBPNGLDL = $(shell libpng-config --ldflags)

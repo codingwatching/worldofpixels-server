@@ -12,13 +12,22 @@
 class WorldStorage;
 
 class Chunk {
+public:
+	using Pos = i32;
+
+	static constexpr sz_t size = 512;
+	static constexpr sz_t protectionAreaSize = 16;
+
+	static constexpr sz_t pc = size / protectionAreaSize;
+
+private:
 	mutable std::shared_timed_mutex sm;
 	i64 lastAction;
-	const i32 x;
-	const i32 y;
+	const Pos x;
+	const Pos y;
 	const WorldStorage& ws;
 	PngImage data;
-	std::array<u32, 32 * 32> protectionData; // split one chunk to 32x32 protections
+	std::array<u32, pc * pc> protectionData; // split one chunk to protection cells
 	// with specific GIDs, or GGIDs (grouped groups IDs)
 	std::vector<u8> pngCache; // could get big
 	bool canUnload;
@@ -27,7 +36,7 @@ class Chunk {
 	bool moved;
 
 public:
-	Chunk(i32 x, i32 y, const WorldStorage& ws);
+	Chunk(Pos x, Pos y, const WorldStorage& ws);
 	Chunk(Chunk&&);
 	~Chunk();
 

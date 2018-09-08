@@ -9,7 +9,13 @@
 #include <misc/utils.hpp>
 #include <Storage.hpp>
 
-Chunk::Chunk(i32 x, i32 y, const WorldStorage& ws)
+static_assert((Chunk::size & (Chunk::size - 1)) == 0,
+	"Chunk::size must be power of 2");
+
+static_assert((Chunk::size % Chunk::protectionAreaSize) == 0,
+	"Chunk::size must be divisible by Chunk::protectionAreaSize");
+
+Chunk::Chunk(Pos x, Pos y, const WorldStorage& ws)
 : lastAction(jsDateNow()),
   x(x),
   y(y),

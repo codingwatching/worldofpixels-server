@@ -4,7 +4,10 @@
 #include <iostream>
 
 #include <Client.hpp>
+#include <UserInfo.hpp>
 #include <World.hpp>
+
+#include <nlohmann/json.hpp>
 
 Player::Player(Client& c, World& w, u32 pid, i32 startX, i32 startY,
 		Bucket pL, Bucket cL, bool chat, bool cmds, bool mod)

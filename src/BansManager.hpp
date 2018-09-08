@@ -5,7 +5,7 @@
 
 #include <misc/explints.hpp>
 
-#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 struct BanInfo {
 	i64 expiresOn;

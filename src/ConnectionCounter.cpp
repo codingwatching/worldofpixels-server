@@ -2,6 +2,8 @@
 
 #include <ConnectionManager.hpp>
 
+#include <nlohmann/json.hpp>
+
 ConnectionCounter::ConnectionCounter()
 : total(0),
   totalChecked(0),

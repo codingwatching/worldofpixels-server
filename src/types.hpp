@@ -56,10 +56,3 @@ enum captcha_verify_state : u8 {
 	CA_OK,
 	CA_INVALID
 };
-
-struct SocketInfo {
-	std::string origin;
-	std::string ip;
-	Client * player;
-	std::atomic<u8> captcha_verified;
-};

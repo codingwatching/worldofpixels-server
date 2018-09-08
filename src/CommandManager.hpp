@@ -5,8 +5,7 @@
 #include <vector>
 #include <memory>
 
-#include <nlohmann/json.hpp>
-//#include <Server.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 class Command;
 class Server;

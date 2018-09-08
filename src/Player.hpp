@@ -3,7 +3,7 @@
 #include <string>
 #include <functional>
 
-#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <misc/explints.hpp>
 #include <misc/color.hpp>
@@ -15,14 +15,16 @@ class UserInfo;
 
 class Player {
 public:
+	using Id = u32;
+	using Pos = i64;
 	class Builder;
 
 private:
 	Client& cl;
 	World& world;
-	const u32 playerId;
-	i32 x;
-	i32 y;
+	const Id playerId;
+	Pos x;
+	Pos y;
 	Bucket chatLimiter;
 	Bucket paintLimiter;
 	bool chatAllowed;
@@ -33,7 +35,7 @@ private:
 public:
 	Player(const Player&) = delete;
 
-	Player(Client&, World&, u32, i32, i32,
+	Player(Client&, World&, Id, Pos, Pos,
 		Bucket, Bucket, bool, bool, bool);
 	Player(const Player::Builder&);
 	~Player();
@@ -48,14 +50,14 @@ public:
 
 	void setPaintRate(u16 rate, u16 per);
 
-	i32 getX() const;
-	i32 getY() const;
-	u32 getPid() const;
+	Pos getX() const;
+	Pos getY() const;
+	Id getPid() const;
 
-	void teleportTo(i32 x, i32 y);
+	void teleportTo(Pos x, Pos y);
 	void tell(const std::string&);
 
-	void tryPaint(i32 x, i32 y, RGB_u);
+	void tryPaint(Pos x, i32 y, RGB_u);
 	void tryMoveTo(i32 x, i32 y, u8 toolId);
 	void tryChat(const std::string&);
 

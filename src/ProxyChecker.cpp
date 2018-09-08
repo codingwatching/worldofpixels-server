@@ -9,6 +9,8 @@
 
 #include <iostream>
 
+#include <nlohmann/json.hpp>
+
 // TODO: don't check the same ip more than once each time
 
 static void to_json(nlohmann::json& j, const ProxyChecker::State s) {

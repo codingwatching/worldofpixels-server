@@ -4,7 +4,7 @@
 
 #include <misc/fwd_uWS.h>
 
-#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 struct IncomingConnection;
 struct ClosedConnection;

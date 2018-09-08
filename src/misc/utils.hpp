@@ -16,3 +16,4 @@ void rtrim(std::string&);
 void ltrim(std::string&);
 void trim(std::string&);
 const std::string& demangle(std::type_index);
+std::type_index strToType(const std::string& s);

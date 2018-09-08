@@ -4,7 +4,7 @@
 #include <string>
 #include <utility>
 
-#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Command.hpp>
 

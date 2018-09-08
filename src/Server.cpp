@@ -61,7 +61,10 @@ Server::Server(std::string basePath)
 		nlohmann::json processorInfo;
 
 		conn.forEachProcessor([&processorInfo] (ConnectionProcessor& p) {
-			processorInfo[demangle(typeid(p))] = p.getPublicInfo();
+			nlohmann::json j = p.getPublicInfo();
+			if (!j.is_null()) {
+				processorInfo[demangle(typeid(p))] = std::move(j);
+			}
 		});
 
 		j["connectInfo"] = std::move(processorInfo);
@@ -97,12 +100,12 @@ Server::Server(std::string basePath)
 		} catch(...) { return ApiProcessor::INVALID_ARGS; }
 
 		// will encode the png in another thread if necessary and end the request when done
-		if (!world.sendChunk(res, x, y)) {
+		if (!world.sendChunk(x, y, res)) {
 			// didn't immediately send
 			rs.onCancel = [&world, x, y, res] {
 				// the world is guaranteed not to unload until all requests finish
 				// so this reference should be valid
-				world.cancelChunkRequest(res, x, y);
+				world.cancelChunkRequest(x, y, res);
 			};
 		}
 
@@ -112,11 +115,11 @@ Server::Server(std::string basePath)
 	conn.addToBeg<ProxyChecker>(hcli, tc).setState(ProxyChecker::State::OFF);
 	conn.addToBeg<CaptchaChecker>(hcli).setState(CaptchaChecker::State::OFF);
 	conn.addToBeg<WorldChecker>(wm);
-	conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>({
+	conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>{
 		"http://ourworldofpixels.com",
 		"https://ourworldofpixels.com",
 		"https://jsconsole.com"
-	}));
+	});
 	conn.addToBeg<BanChecker>(bm);
 	conn.addToBeg<ConnectionCounter>();
 
@@ -130,6 +133,7 @@ Server::Server(std::string basePath)
 	h.onMessage([this] (uWS::WebSocket<uWS::SERVER> * ws, const char * msg, sz_t len, uWS::OpCode oc) {
 		Client * cl = static_cast<Client *>(ws->getUserData());
 		if (!cl) { return; }
+		cl->updateLastActionTime();
 		Player& pl = cl->getPlayer();
 
 		if (oc == uWS::BINARY) {
@@ -152,8 +156,8 @@ Server::Server(std::string basePath)
 					pinfo_t pos = *((pinfo_t *)msg);
 					pl.tryMoveTo(pos.x, pos.y, pos.tool);
 				} break;
-			};
-		} else if (oc == uWS::TEXT && len > 1 && msg[len-1] == '\12') {
+			}
+		} else if (oc == uWS::TEXT) {
 			std::string mstr(msg, len - 1);
 			if (getUtf8StrLen(mstr) <= 128) {
 				if(msg[0] != '/'){
@@ -203,13 +207,11 @@ bool Server::listenAndRun() {
 
 void Server::kickInactivePlayers() {
 	i64 now = jsDateNow();
-/*	for (auto it = connsws.begin(); it != connsws.end();) {
-		if (Client * c = static_cast<SocketInfo *>((*it++)->getUserData())->player) {
-			if (now - c->get_last_move() > 1200000 && !c->is_admin()) {
-				c.disconnect();
-			}
+	conn.forEachClient([now] (Client& c) {
+		if (c.inactiveKickEnabled() && now - c.getLastActionTime() > 1200000) {
+			c.close();
 		}
-	}*/
+	});
 }
 
 void Server::unsafeStop() {

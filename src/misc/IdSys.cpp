@@ -1,10 +1,13 @@
 #include "IdSys.hpp"
+#include <cstdint>
 
-IdSys::IdSys()
+template<typename N>
+IdSys<N>::IdSys()
 : currentId(0) { }
 
-std::uint32_t IdSys::getId() {
-	std::uint32_t id;
+template<typename N>
+N IdSys<N>::getId() {
+	N id;
 	if (!freeIds.empty()) {
 		auto it = freeIds.begin();
 		id = *it;
@@ -16,7 +19,8 @@ std::uint32_t IdSys::getId() {
 	return id;
 }
 
-void IdSys::freeId(std::uint32_t id) {
+template<typename N>
+void IdSys<N>::freeId(N id) {
 	if (id == currentId) {
 		--currentId;
 	} else {
@@ -26,7 +30,8 @@ void IdSys::freeId(std::uint32_t id) {
 	shrink();
 }
 
-void IdSys::shrink() {
+template<typename N>
+void IdSys<N>::shrink() {
 	if (!freeIds.empty()) {
 		auto it = freeIds.end();
 		while (--it != freeIds.begin() && *it == currentId) {
@@ -35,3 +40,5 @@ void IdSys::shrink() {
 		}
 	}
 }
+
+template class IdSys<std::uint32_t>;

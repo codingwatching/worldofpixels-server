@@ -6,22 +6,6 @@
 
 #include <World.hpp>
 
-UserInfo::UserInfo()
-: uid(1),
-  username("Guest"),
-  isGuest(true) { }
-
-UserInfo::UserInfo(u64 uid, std::string s)
-: uid(uid),
-  username(std::move(s)),
-  isGuest(false) { }
-
-void to_json(nlohmann::json& j, const UserInfo& ui) {
-	j["uid"] = ui.uid;
-	j["username"] = ui.username;
-	j["guest"] = ui.isGuest;
-}
-
 Client::Client(uWS::WebSocket<uWS::SERVER> * ws, World& w, Player::Builder& pb, UserInfo u, std::string ip)
 : ws(ws),
   lastActionOn(jsDateNow()),
@@ -31,6 +15,10 @@ Client::Client(uWS::WebSocket<uWS::SERVER> * ws, World& w, Player::Builder& pb, 
 
 void Client::updateLastActionTime() {
 	lastActionOn = jsDateNow();
+}
+
+bool Client::inactiveKickEnabled() const {
+	return true;
 }
 
 i64 Client::getLastActionTime() const {

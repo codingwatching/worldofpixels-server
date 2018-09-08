@@ -10,10 +10,11 @@
 #include <misc/explints.hpp>
 #include <misc/fwd_uWS.h>
 
-#include <Client.hpp>
-#include <ConnectionProcessor.hpp>
+#include <UserInfo.hpp>
 
 class ConnectionProcessor;
+class IncomingConnection;
+class Client;
 
 struct ClosedConnection {
 	uWS::WebSocket<true> * const ws;
