@@ -1,12 +1,12 @@
 #include "ConnectionManager.hpp"
 
 #include <uWS.h>
-#include <nlohmann/json.hpp>
 
 #include <misc/utils.hpp>
 
 #include <Client.hpp>
 #include <ConnectionProcessor.hpp>
+#include <Packet.hpp>
 
 ClosedConnection::ClosedConnection(Client& c)
 : ws(c.getWs()),
@@ -94,12 +94,7 @@ void ConnectionManager::handleIncoming(uWS::WebSocket<uWS::SERVER> * ws,
 
 	for (auto it = processors.begin(); it != processors.end(); ++it) {
 		if (!(*it)->preCheck(*ic, req)) {
-			std::string s(nlohmann::json({
-				{"t", "auth_error"},
-				{"at", "pre_check"},
-				{"in", demangle(typeid(*(*it).get()))}
-			}).dump());
-			ws->send(s.data(), s.size(), uWS::TEXT);
+			AuthError::one(ws, typeid(*it->get()));
 
 			ic->nextProcessor = std::next(it);
 			handleFail(*ic);
@@ -115,13 +110,8 @@ void ConnectionManager::handleAsync(IncomingConnection& ic) {
 	while (ic.nextProcessor != processors.end()) {
 		auto& pr = *ic.nextProcessor++;
 		if (pr->isAsync(ic)) {
-			{
-				std::string s(nlohmann::json({
-					{"t", "auth_progress"},
-					{"on", demangle(typeid(*pr.get()))}
-				}).dump());
-				ic.ws->send(s.data(), s.size(), uWS::TEXT);
-			}
+			AuthProgress::one(ic.ws, typeid(*pr.get()));
+
 			// not safe to use ic after calling callback
 			pr->asyncCheck(ic, [this, &ic, &pr] (bool ok) {
 				if (ok && !ic.cancelled) {
@@ -131,13 +121,7 @@ void ConnectionManager::handleAsync(IncomingConnection& ic) {
 
 				// is true if socket closed
 				if (!ic.cancelled) {
-					std::string s(nlohmann::json({
-						{"t", "auth_error"},
-						{"at", "async_check"},
-						{"in", demangle(typeid(*pr.get()))}
-					}).dump());
-					ic.ws->send(s.data(), s.size(), uWS::TEXT);
-
+					AuthError::one(ic.ws, typeid(*pr.get()));
 					handleFail(ic);
 				}
 
@@ -158,28 +142,14 @@ void ConnectionManager::handleFail(IncomingConnection& ic) {
 void ConnectionManager::handleEnd(IncomingConnection& ic) {
 	for (auto& p : processors) {
 		if (!p->endCheck(ic)) {
-			std::string s(nlohmann::json({
-				{"t", "auth_error"},
-				{"at", "end_check"},
-				{"in", demangle(typeid(*p.get()))}
-			}).dump());
-			ic.ws->send(s.data(), s.size(), uWS::TEXT);
-
+			AuthError::one(ic.ws, typeid(*pr.get()));
 			handleFail(ic);
 			handleDisconnect(ic, true);
 			return;
 		}
 	}
 
-	{
-		std::string s(nlohmann::json({
-			{ "t", "auth_ok" },
-			{ "world", ic.ci.world },
-			{ "user", ic.ci.ui }
-		}).dump());
-
-		ic.ws->send(s.data(), s.size(), uWS::TEXT);
-	}
+	AuthOk::one(ic.ws, ic.ci.world, ic.ci.ui.uid, ic.ci.ui.username, ic.ci.ui.isGuest);
 
 	Client * cl = clientTransformer(ic);
 	ic.ws->setUserData(cl);

@@ -5,11 +5,11 @@
 
 #include <Client.hpp>
 #include <UserInfo.hpp>
-#include <World.hpp>
+#include <Packet.hpp>
 
 #include <nlohmann/json.hpp>
 
-Player::Player(Client& c, World& w, u32 pid, i32 startX, i32 startY,
+Player::Player(Client& c, World& w, u32 pid, Pos startX, Pos startY,
 		Bucket pL, Bucket cL, bool chat, bool cmds, bool mod)
 : cl(c),
   world(w),
@@ -59,19 +59,19 @@ UserInfo& Player::getUserInfo() const {
 	return cl.getUserInfo();
 }
 
-i32 Player::getX() const {
+Pos Player::getX() const {
 	return x;
 }
 
-i32 Player::getY() const {
+Pos Player::getY() const {
 	return y;
 }
 
-u32 Player::getPid() const {
+Id Player::getPid() const {
 	return playerId;
 }
 
-void Player::teleportTo(i32 newX, i32 newY) {
+void Player::teleportTo(Pos newX, Pos newY) {
 	x = newX;
 	y = newY;
 	world.playerUpdated(*this);
@@ -85,11 +85,11 @@ void Player::tell(const std::string& s) {
 	});
 }
 
-void Player::tryPaint(i32 x, i32 y, RGB_u rgb) {
+void Player::tryPaint(World::Pos x, World::Pos y, RGB_u rgb) {
 	world.paint(*this, x, y, rgb);
 }
 
-void Player::tryMoveTo(i32 newX, i32 newY, u8 newToolId) {
+void Player::tryMoveTo(Pos newX, Pos newY, Tid newToolId) {
 	x = newX;
 	y = newY;
 	toolId = newToolId;
@@ -100,13 +100,8 @@ void Player::tryChat(const std::string& s) {
 	world.chat(*this, std::move(s));
 }
 
-void Player::send(const u8 * buf, sz_t len, bool text) {
-	cl.send(buf, len, text);
-}
-
-void Player::send(const nlohmann::json& j) {
-	std::string s(j.dump());
-	send(reinterpret_cast<const u8*>(s.data()), s.size(), true);
+void Player::send(Packet& p) {
+	cl.send(p);
 }
 
 bool Player::operator ==(const Player& p) const {
@@ -142,12 +137,12 @@ Player::Builder& Player::Builder::setWorld(World& w) {
 	return *this;
 }
 
-Player::Builder& Player::Builder::setPlayerId(u32 pId) {
+Player::Builder& Player::Builder::setPlayerId(Player::Id pId) {
 	playerId = pId;
 	return *this;
 }
 
-Player::Builder& Player::Builder::setSpawnPoint(i32 x, i32 y) {
+Player::Builder& Player::Builder::setSpawnPoint(Player::Pos x, Player::Pos y) {
 	startX = x;
 	startY = y;
 	return *this;

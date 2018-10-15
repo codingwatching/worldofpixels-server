@@ -28,7 +28,7 @@ public:
 	Player& getPlayer();
 	UserInfo& getUserInfo();
 
-	void send(const u8 *, sz_t, bool text);
+	void send(Packet&);
 	void close();
 
 	bool operator ==(const Client&) const;

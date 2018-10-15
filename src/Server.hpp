@@ -7,6 +7,7 @@
 #include <CommandManager.hpp>
 #include <Storage.hpp>
 #include <WorldManager.hpp>
+#include <PacketReader.hpp>
 
 #include <misc/explints.hpp>
 #include <misc/TimedCallbacks.hpp>
@@ -30,11 +31,10 @@ class Server {
 	TimedCallbacks tc;
 	AsyncHttp hcli;
 	WorldManager wm;
+	PacketReader pr;
 	ApiProcessor api;
 	CommandManager cmd;
 	ConnectionManager conn;
-
-	//std::unordered_map<std::string, u8> conns;
 
 	u32 saveTimer;
 

@@ -10,7 +10,7 @@
 #include <Storage.hpp>
 
 static_assert((Chunk::size & (Chunk::size - 1)) == 0,
-	"Chunk::size must be power of 2");
+	"Chunk::size must be a power of 2");
 
 static_assert((Chunk::size % Chunk::protectionAreaSize) == 0,
 	"Chunk::size must be divisible by Chunk::protectionAreaSize");
@@ -91,7 +91,8 @@ Chunk::~Chunk() {
 bool Chunk::setPixel(u16 x, u16 y, RGB_u clr) {
 	if (data.getPixel(x, y).rgb != clr.rgb) {
 		lastAction = jsDateNow();
-		data.setPixel(x, y, clr);
+#warning "Fix possible concurrent access"
+		data.setPixel(x, y, clr); // XXX: possible concurrent access... must be looked at
 		pngFileOutdated = true;
 		pngCacheOutdated = true;
 		return true;

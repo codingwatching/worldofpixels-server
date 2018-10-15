@@ -23,9 +23,9 @@ class Client;
 
 class World : public WorldStorage {
 public:
-	using PixelPos = i32;
+	using Pos = i32;
 
-	static constexpr Chunk::Pos border = std::numeric_limits<PixelPos>::max() / Chunk::size;
+	static constexpr Chunk::Pos border = std::numeric_limits<Pos>::max() / Chunk::size;
 
 private:
 	IdSys<Player::Id> ids;

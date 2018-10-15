@@ -35,6 +35,7 @@ Server::Server(std::string basePath)
   tc(h.getLoop()),
   hcli(h.getLoop()),
   wm(tb, tc, s),
+  pr(h),
   api(h, "status"),
   cmd(*this),
   conn(h, "OWOP"),
@@ -130,45 +131,7 @@ Server::Server(std::string basePath)
 		return new Client(ic.ws, w, pb, std::move(ic.ci.ui), std::move(ic.ip));
 	});
 
-	h.onMessage([this] (uWS::WebSocket<uWS::SERVER> * ws, const char * msg, sz_t len, uWS::OpCode oc) {
-		Client * cl = static_cast<Client *>(ws->getUserData());
-		if (!cl) { return; }
-		cl->updateLastActionTime();
-		Player& pl = cl->getPlayer();
-
-		if (oc == uWS::BINARY) {
-			switch (len) {
-				case 10: {
-					/*if (player->get_rank() < Client::MODERATOR) {
-						player->tell("Stop playing around with mod tools! :)");
-						break;
-					}*/
-					chunkpos_t pos = *((chunkpos_t *)msg);
-					pl.getWorld().setChunkProtection(pos.x, pos.y, (bool) msg[sizeof(chunkpos_t)]);
-				} break;
-
-				case 11: {
-					pixpkt_t pos = *((pixpkt_t *)msg);
-					pl.tryPaint(pos.x, pos.y, {pos.r, pos.g, pos.b});
-				} break;
-
-				case 12: {
-					pinfo_t pos = *((pinfo_t *)msg);
-					pl.tryMoveTo(pos.x, pos.y, pos.tool);
-				} break;
-			}
-		} else if (oc == uWS::TEXT) {
-			std::string mstr(msg, len - 1);
-			if (getUtf8StrLen(mstr) <= 128) {
-				if(msg[0] != '/'){
-					pl.tryChat(std::move(mstr));
-				} else {
-					pl.tell("Commands unavailable atm.");
-					//cmds.exec(player, std::string(msg + 1, len - 2));
-				}
-			}
-		}
-	});
+	//pr.set<>
 
 	h.getDefaultGroup<uWS::SERVER>().startAutoPing(15000);
 }

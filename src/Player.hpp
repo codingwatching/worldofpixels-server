@@ -5,6 +5,7 @@
 
 #include <nlohmann/json_fwd.hpp>
 
+#include <World.hpp>
 #include <misc/explints.hpp>
 #include <misc/color.hpp>
 #include <misc/Bucket.hpp>
@@ -16,21 +17,23 @@ class UserInfo;
 class Player {
 public:
 	using Id = u32;
-	using Pos = i64;
+	using Tid = u8; // ToolId
+	using Step = u8; // Extra precision for X and Y
 	class Builder;
 
 private:
 	Client& cl;
 	World& world;
 	const Id playerId;
-	Pos x;
-	Pos y;
+	World::Pos x;
+	World::Pos y;
 	Bucket chatLimiter;
 	Bucket paintLimiter;
 	bool chatAllowed;
 	bool cmdsAllowed;
 	bool modifyWorldAllowed;
-	u8 toolId;
+	Tid toolId;
+	Step pixelStep;
 
 public:
 	Player(const Player&) = delete;
@@ -57,12 +60,11 @@ public:
 	void teleportTo(Pos x, Pos y);
 	void tell(const std::string&);
 
-	void tryPaint(Pos x, i32 y, RGB_u);
-	void tryMoveTo(i32 x, i32 y, u8 toolId);
+	void tryPaint(World::Pos x, World::Pos y, RGB_u);
+	void tryMoveTo(Pos x, Pos y, Tid toolId);
 	void tryChat(const std::string&);
 
-	void send(const u8 *, sz_t, bool text = false);
-	void send(const nlohmann::json&);
+	void send(Packet&);
 
 	bool operator ==(const Player&) const;
 	bool operator  <(const Player&) const;
@@ -71,9 +73,9 @@ public:
 class Player::Builder {
 	Client * cl;
 	World * wo;
-	u32 playerId;
-	i32 startX;
-	i32 startY;
+	Player::Id playerId;
+	Player::Pos startX;
+	Player::Pos startY;
 	Bucket paintLimiter;
 	Bucket chatLimiter;
 	bool chatAllowed;
@@ -85,8 +87,8 @@ public:
 
 	Builder& setClient(Client&);
 	Builder& setWorld(World&);
-	Builder& setPlayerId(u32);
-	Builder& setSpawnPoint(i32, i32);
+	Builder& setPlayerId(Player::Id);
+	Builder& setSpawnPoint(Player::Pos, Player::Pos);
 	Builder& setPaintBucket(Bucket);
 	Builder& setChatBucket(Bucket);
 	Builder& setChatAllowed(bool);
