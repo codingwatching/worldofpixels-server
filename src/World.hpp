@@ -67,12 +67,12 @@ public:
 	bool sendChunk(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse *);
 	void cancelChunkRequest(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse *);
 
-	void setChunkProtection(Chunk::Pos x, Chunk::Pos y, bool state);
+	void setAreaProtection(Chunk::ProtPos x, Chunk::ProtPos y, bool state);
 
-	bool paint(Player&, i32 x, i32 y, RGB_u);
+	bool paint(Player&, World::Pos x, World::Pos y, RGB_u);
 
 	void chat(Player&, const std::string&);
-	void broadcast(const std::string& msg) const;
+	void broadcast(const PrepMsg&);
 
 	bool save();
 
@@ -81,7 +81,7 @@ public:
 	void restrictDrawing(bool);
 
 private:
-	bool isActionPaintAllowed(const Chunk&, i32 x, i32 y, Player&);
+	bool isActionPaintAllowed(const Chunk&,  World::Pos x,  World::Pos y, Player&);
 	bool tryUnloadAllChunks();
 	void tryUnloadWorld();
 };

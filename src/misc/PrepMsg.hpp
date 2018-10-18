@@ -12,9 +12,9 @@ public:
 	PrepMsg(const PrepMsg&);
 	~PrepMsg();
 
-	void * getPrepared();
+	void * getPrepared() const;
 
-private:
+protected:
 	void setPrepared(u8 *, sz_t);
 	void delPrepared();
 };

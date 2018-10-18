@@ -3,6 +3,7 @@
 #include <Client.hpp>
 #include <UserInfo.hpp>
 #include <config.hpp>
+#include <PacketDefinitions.hpp>
 
 #include <misc/TaskBuffer.hpp>
 
@@ -296,60 +297,48 @@ void World::cancelChunkRequest(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse * r
 }
 
 void World::chat(Player& p, const std::string& s) {
-	broadcast(nlohmann::json({
-		{ "t", "chat" },
-		{ "user", p.getUserInfo() },
-		{ "msg", s }
-	}).dump());
+	broadcast(ChatMessage(p.getUserInfo().uid, s));
 }
 
-bool World::paint(Player& p, i32 x, i32 y, RGB_u clr) {
-	Chunk::Pos cx = x / border;
-	fix this /////////////////
-	auto chunk = getChunk(x >> 9, y >> 9);
-	if (chunk == chunks.end()) {
+// returns false when you were not allowed to paint, or position is out of range
+bool World::paint(Player& p, World::Pos x, World::Pos y, RGB_u clr) {
+	Chunk::Pos cx = x >> Chunk::posShift;
+	Chunk::Pos cy = y >> Chunk::posShift;
+
+	if (!verifyChunkPos(cx, cy)) {
 		return false;
 	}
 
-	if (isActionPaintAllowed(chunk->second, x, y, p) && chunk->second.setPixel(x & 0x1FF, y & 0x1FF, clr)){
-		pixelUpdates.push_back({p.getPid(), x, y, clr.r, clr.g, clr.b});
-		schedUpdates();
+	Chunk& chunk = getChunk(cx, cy);
+
+	if (isActionPaintAllowed(chunk, x, y, p)) {
+		if (chunk.setPixel(x, y, clr)) {
+			pixelUpdates.push_back({p.getPid(), x, y, clr.r, clr.g, clr.b});
+			schedUpdates();
+		}
+
 		return true;
 	}
 
 	return false;
 }
 
-void World::setChunkProtection(i32 x, i32 y, bool state) {
-	auto chunk = getChunk(x >> 5, y >> 5); // div by 32
-	if (chunk == chunks.end()) {
-		return;
-	}
+void World::setAreaProtection(Chunk::ProtPos x, Chunk::ProtPos y, bool state) {
+	Chunk& chunk = getChunk(x >> Chunk::pcShift, y >> Chunk::pcShift);
+	u32 newState = state ? 1 : 0; // these numbers should have a special meaning
 
 	// x and y are 16x16 aligned
-	chunk->second.setProtectionGid(x & 0x1F, y & 0x1F, state ? 1 : 0);
+	chunk.setProtectionGid(x, y, newState);
 
 	if (players.size() != 0) {
-		u8 msg[10] = {CHUNK_PROTECTED};
-		memcpy(&msg[1], (char *)&x, 4);
-		memcpy(&msg[5], (char *)&y, 4);
-		memcpy(&msg[9], (char *)&state, 1);
-		uWS::WebSocket<uWS::SERVER>::PreparedMessage * prep = uWS::WebSocket<uWS::SERVER>::prepareMessage(
-			(char *)&msg[0], sizeof(msg), uWS::BINARY, false);
-		for (Player& pl : players) {
-			pl.getClient().getWs()->sendPrepared(prep);
-		}
-		uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
+		broadcast(ProtectionUpdate(x, y, newState));
 	}
 }
 
-void World::broadcast(const std::string& msg) const {
-	uWS::WebSocket<uWS::SERVER>::PreparedMessage * prep = uWS::WebSocket<uWS::SERVER>::prepareMessage(
-		(char *)msg.c_str(), msg.size(), uWS::TEXT, false);
+void World::broadcast(const PrepMsg& prep) {
 	for (Player& pl : players) {
-		pl.getClient().getWs()->sendPrepared(prep);
+		pl.send(prep);
 	}
-	uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
 }
 
 bool World::save() {
@@ -370,9 +359,10 @@ void World::restrictDrawing(bool s) {
 	drawRestricted = s;
 }
 
-bool World::isActionPaintAllowed(const Chunk& c, i32 x, i32 y, Player& p) {
-	x >>= 4; x &= 0xF; // divide by 16 and mod 16
-	y >>= 4; y &= 0xF;
+bool World::isActionPaintAllowed(const Chunk& c, World::Pos x, World::Pos y, Player& p) {
+	x >>= Chunk::pSizeShift;
+	y >>= Chunk::pSizeShift;
+
 	return c.getProtectionGid(x, y) == 0 /*|| rank >= Client::MODERATOR*/;
 }
 

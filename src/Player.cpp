@@ -3,13 +3,14 @@
 #include <memory>
 #include <iostream>
 
+#include <World.hpp>
 #include <Client.hpp>
 #include <UserInfo.hpp>
-#include <Packet.hpp>
+#include <PacketDefinitions.hpp>
 
 #include <nlohmann/json.hpp>
 
-Player::Player(Client& c, World& w, u32 pid, Pos startX, Pos startY,
+Player::Player(Client& c, World& w, u32 pid, World::Pos startX, World::Pos startY,
 		Bucket pL, Bucket cL, bool chat, bool cmds, bool mod)
 : cl(c),
   world(w),
@@ -20,7 +21,9 @@ Player::Player(Client& c, World& w, u32 pid, Pos startX, Pos startY,
   chatLimiter(std::move(cL)),
   chatAllowed(chat), // TODO: get from world
   cmdsAllowed(cmds),
-  modifyWorldAllowed(mod) {
+  modifyWorldAllowed(mod),
+  toolId(0),
+  pixelStep(0) {
 	// send player data to the client
 	world.playerJoined(*this);
   	std::cout << "New player on world: " << world.getWorldName() << ", PID: " << playerId << ", UID: " << getUserInfo().uid << std::endl;
@@ -59,40 +62,41 @@ UserInfo& Player::getUserInfo() const {
 	return cl.getUserInfo();
 }
 
-Pos Player::getX() const {
+World::Pos Player::getX() const {
 	return x;
 }
 
-Pos Player::getY() const {
+World::Pos Player::getY() const {
 	return y;
 }
 
-Id Player::getPid() const {
+Player::Step Player::getStep() const {
+	return pixelStep;
+}
+
+Player::Id Player::getPid() const {
 	return playerId;
 }
 
-void Player::teleportTo(Pos newX, Pos newY) {
+void Player::teleportTo(World::Pos newX, World::Pos newY) {
 	x = newX;
 	y = newY;
 	world.playerUpdated(*this);
 }
 
 void Player::tell(const std::string& s) {
-	send({
-		{"t", "pm"},
-		{"from", 0},
-		{"msg", s}
-	});
+	ChatMessage::one(cl.getWs(), 0, s);
 }
 
 void Player::tryPaint(World::Pos x, World::Pos y, RGB_u rgb) {
 	world.paint(*this, x, y, rgb);
 }
 
-void Player::tryMoveTo(Pos newX, Pos newY, Tid newToolId) {
+void Player::tryMoveTo(World::Pos newX, World::Pos newY, Step prec, Tid newToolId) {
 	x = newX;
 	y = newY;
 	toolId = newToolId;
+	pixelStep = prec;
 	world.playerUpdated(*this);
 }
 
@@ -100,7 +104,7 @@ void Player::tryChat(const std::string& s) {
 	world.chat(*this, std::move(s));
 }
 
-void Player::send(Packet& p) {
+void Player::send(const PrepMsg& p) {
 	cl.send(p);
 }
 
@@ -142,7 +146,7 @@ Player::Builder& Player::Builder::setPlayerId(Player::Id pId) {
 	return *this;
 }
 
-Player::Builder& Player::Builder::setSpawnPoint(Player::Pos x, Player::Pos y) {
+Player::Builder& Player::Builder::setSpawnPoint(World::Pos x, World::Pos y) {
 	startX = x;
 	startY = y;
 	return *this;

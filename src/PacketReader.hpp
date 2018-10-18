@@ -10,7 +10,7 @@ class Client;
 
 class PacketReader {
 	using OpCode = u8;
-	std::unordered_map<OpCode, std::function<void(Client&, u8 *, sz_t)>> handlers;
+	std::unordered_map<OpCode, std::function<void(Client&, const u8 *, sz_t)>> handlers;
 
 public:
 	PacketReader(uWS::Hub&);

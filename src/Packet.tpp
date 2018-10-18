@@ -1,14 +1,13 @@
 #include <type_traits>
-#include <typeindex>
 #include <array>
 #include <string>
 #include <algorithm>
 #include <stdexcept>
 #include <tuple>
-#include <optional>
 #include <assert.h>
 //#include <iostream>
 
+#include <misc/optional.hpp>
 #include <misc/varints.hpp>
 #include <misc/BufferHelper.hpp>
 #include <misc/utils.hpp>
@@ -56,11 +55,14 @@ template<typename>
 struct is_optional : std::false_type {};
 
 template<typename T>
-struct is_optional<std::optional<T>> : std::true_type {};
+struct is_optional<estd::optional<T>> : std::true_type {};
 
 //////////////////////////////
 // Forward declarations
 //////////////////////////////
+
+sz_t getSize(const std::type_index& ti);
+sz_t writeToBuf(u8 *& b, const std::type_index& ti, sz_t remaining);
 
 template<typename... Ts>
 sz_t getSize(const std::tuple<Ts...>& t);
@@ -92,66 +94,66 @@ template<typename T, std::size_t N>
 sz_t getSize(const std::array<T, N>& arr);
 
 template<typename T>
-sz_t getSize(const std::optional<T>& opt);
+sz_t getSize(const estd::optional<T>& opt);
 
 template<typename N>
 typename std::enable_if<std::is_arithmetic<N>::value,
 	sz_t>::type
-writeToBuf(u8 ** b, const N& num, sz_t remaining);
+writeToBuf(u8 *& b, const N& num, sz_t remaining);
 
 template<typename... Ts>
-sz_t writeToBuf(u8 ** b, const std::tuple<Ts...>& t, sz_t remaining);
+sz_t writeToBuf(u8 *& b, const std::tuple<Ts...>& t, sz_t remaining);
 
 template<typename Container>
 typename std::enable_if<has_const_iterator<Container>::value
 	&& !is_std_array<Container>::value,
 	sz_t>::type
-writeToBuf(u8 ** b, const Container& c, sz_t remaining);
+writeToBuf(u8 *& b, const Container& c, sz_t remaining);
 
 template<typename T, std::size_t N>
-sz_t writeToBuf(u8 ** b, const std::array<T, N>& arr, sz_t remaining);
+sz_t writeToBuf(u8 *& b, const std::array<T, N>& arr, sz_t remaining);
 
 template<typename T>
-sz_t writeToBuf(u8 ** b, const std::optional<T>& opt, sz_t remaining);
+sz_t writeToBuf(u8 *& b, const estd::optional<T>& opt, sz_t remaining);
 
 template<typename N>
 typename std::enable_if<std::is_arithmetic<N>::value,
 	N>::type
-readFromBuf(u8 ** b, sz_t remaining);
+readFromBuf(const u8 *& b, sz_t remaining);
 
 template<typename Container>
 typename std::enable_if<has_const_iterator<Container>::value
 	&& !is_std_array<Container>::value
 	&& std::is_arithmetic<typename Container::value_type>::value,
 	Container>::type
-readFromBuf(u8 ** b, sz_t remaining);
+readFromBuf(const u8 *& b, sz_t remaining);
 
 template<typename Container>
 typename std::enable_if<has_const_iterator<Container>::value
 	&& !is_std_array<Container>::value
 	&& !std::is_arithmetic<typename Container::value_type>::value,
 	Container>::type
-readFromBuf(u8 ** b, sz_t remaining);
+readFromBuf(const u8 *& b, sz_t remaining);
 
 template<class Tuple>
 typename std::enable_if<is_tuple<Tuple>::value,
 	Tuple>::type
-readFromBuf(u8 ** b, sz_t remaining);
+readFromBuf(const u8 *& b, sz_t remaining);
 
 template<class Array>
 typename std::enable_if<is_std_array<Array>::value,
 	Array>::type
-readFromBuf(u8 ** b, sz_t remaining);
+readFromBuf(const u8 *& b, sz_t remaining);
 
 template<class OptionalValue>
 typename std::enable_if<is_optional<OptionalValue>::value,
 	OptionalValue>::type
-readFromBuf(u8 ** b, sz_t remaining);
+readFromBuf(const u8 *& b, sz_t remaining);
 
 //////////////////////////////
 
 template<typename... Args>
-constexpr T add(Args&&... args) {
+constexpr decltype(auto) add(Args&&... args) {
 	return (args + ... + 0);
 }
 
@@ -178,7 +180,7 @@ sz_t getTupleBufferSize(const Tuple& t, std::index_sequence<Is...>) {
 
 template<typename... Ts>
 sz_t getSize(const std::tuple<Ts...>& t) {
-	if constexpr (are_all_arithmetic<Ts...>::value) {
+	if /*constexpr*/ (are_all_arithmetic<Ts...>::value) {
 		return add(sizeof(Ts)...);
 	} else {
 		return getTupleBufferSize(t, std::index_sequence_for<Ts...>{});
@@ -206,7 +208,7 @@ getSize(const Container& c) {
 	using T = typename Container::value_type;
 	using Result = is_tuple_arithmetic<T>;
 
-	if constexpr (Result::value) {
+	if /*constexpr*/ (Result::value) {
 		return unsignedVarintSize(c.size()) + Result::size * c.size();
 	}
 
@@ -241,7 +243,7 @@ getSize(const Container& c) {
 
 template<typename T, std::size_t N>
 sz_t getSize(const std::array<T, N>& arr) {
-	if constexpr (std::is_arithmetic<T>::value) {
+	if /*constexpr*/ (std::is_arithmetic<T>::value) {
 		return sizeof(T) * N;
 	} else {
 		sz_t size = 0;
@@ -254,37 +256,33 @@ sz_t getSize(const std::array<T, N>& arr) {
 }
 
 template<typename T>
-sz_t getSize(const std::optional<T>& opt) {
+sz_t getSize(const estd::optional<T>& opt) {
 	return sizeof(bool) + (opt.has_value() ? getSize(*opt) : 0);
-}
-
-sz_t getSize(const std::type_index& ti) {
-	return getSize(demangle(ti));
 }
 
 template<typename N> // double pointer!
 typename std::enable_if<std::is_arithmetic<N>::value,
 	sz_t>::type
-writeToBuf(u8 ** b, const N& num, sz_t remaining) {
+writeToBuf(u8 *& b, const N& num, sz_t remaining) {
 	assert(remaining >= sizeof(N));
-	*b += buf::writeBE(*b, num);
+	b += buf::writeBE(b, num);
 	return sizeof(N);
 }
 
 template<class Tuple, std::size_t... Is>
-sz_t tupleToBuf(u8 ** b, const Tuple& t, sz_t remaining, std::index_sequence<Is...>) {
-	u8 * start = *b;
-	(writeToBuf(b, std::get<Is>(t), remaining - (*b - start)), ...);
-	return *b - start;
+sz_t tupleToBuf(u8 *& b, const Tuple& t, sz_t remaining, std::index_sequence<Is...>) {
+	u8 * start = b;
+	(writeToBuf(b, std::get<Is>(t), remaining - (b - start)), ...);
+	return b - start;
 }
 
 template<typename... Ts>
-sz_t writeToBuf(u8 ** b, const std::tuple<Ts...>& t, sz_t remaining) {
+sz_t writeToBuf(u8 *& b, const std::tuple<Ts...>& t, sz_t remaining) {
 	return tupleToBuf(b, t, remaining, std::index_sequence_for<Ts...>{});
 }
 
 template<typename T, std::size_t N>
-sz_t writeToBuf(u8 ** b, const std::array<T, N>& arr, sz_t remaining) {
+sz_t writeToBuf(u8 *& b, const std::array<T, N>& arr, sz_t remaining) {
 	return tupleToBuf(b, arr, remaining, std::make_index_sequence<N>{});
 }
 
@@ -292,19 +290,19 @@ template<typename Container>
 typename std::enable_if<has_const_iterator<Container>::value
 	&& !is_std_array<Container>::value,
 	sz_t>::type
-writeToBuf(u8 ** b, const Container& c, sz_t remaining) {
+writeToBuf(u8 *& b, const Container& c, sz_t remaining) {
 	using T = typename Container::value_type;
 
 	sz_t byteSize = unsignedVarintSize(c.size());
 
 	assert(remaining >= byteSize);
-	*b += encodeUnsignedVarint(*b, c.size());
+	b += encodeUnsignedVarint(b, c.size());
 
 	if (std::is_arithmetic<T>::value && sizeof(T) == 1) {
 		byteSize += c.size() * sizeof(T);
 		assert(remaining >= byteSize);
-		*b = reinterpret_cast<u8 *>(
-			std::copy(c.cbegin(), c.cend(), reinterpret_cast<T *>(*b))
+		b = reinterpret_cast<u8 *>(
+			std::copy(c.cbegin(), c.cend(), reinterpret_cast<T *>(b))
 		);
 	} else {
 		for (const T& v : c) {
@@ -316,10 +314,10 @@ writeToBuf(u8 ** b, const Container& c, sz_t remaining) {
 }
 
 template<typename T>
-sz_t writeToBuf(u8 ** b, const std::optional<T>& opt, sz_t remaining) {
+sz_t writeToBuf(u8 *& b, const estd::optional<T>& opt, sz_t remaining) {
 	assert(remaining >= sizeof(bool));
 
-	*b += buf::writeBE(*b, opt.has_value());
+	b += buf::writeBE(b, opt.has_value());
 	remaining -= sizeof(bool);
 
 	if (opt.has_value()) {
@@ -329,20 +327,16 @@ sz_t writeToBuf(u8 ** b, const std::optional<T>& opt, sz_t remaining) {
 	return sizeof(bool);
 }
 
-sz_t writeToBuf(u8 ** b, const std::type_index& ti, sz_t remaining) {
-	return writeToBuf(b, demangle(ti), remaining);
-}
-
 template<typename N>
 typename std::enable_if<std::is_arithmetic<N>::value,
 	N>::type
-readFromBuf(u8 ** b, sz_t remaining) {
+readFromBuf(const u8 *& b, sz_t remaining) {
 	if (remaining < sizeof(N)) {
 		throw BUFFER_ERROR;
 	}
 
-	u8 * readAt = *b;
-	*b += sizeof(N);
+	u8 * readAt = b;
+	b += sizeof(N);
 	return buf::readBE<N>(readAt);
 }
 
@@ -351,14 +345,14 @@ typename std::enable_if<has_const_iterator<Container>::value
 	&& !is_std_array<Container>::value
 	&& std::is_arithmetic<typename Container::value_type>::value,
 	Container>::type // reads array of static-sized elements
-readFromBuf(u8 ** b, sz_t remaining) {
+readFromBuf(const u8 *& b, sz_t remaining) {
 	using T = typename Container::value_type;
 
 	if (!remaining) {
 		throw BUFFER_ERROR;
 	}
 
-	u8 * readAt = *b;
+	u8 * readAt = b;
 	sz_t decodedBytes;
 	u64 size = decodeUnsignedVarint(readAt, decodedBytes, remaining);
 
@@ -366,11 +360,11 @@ readFromBuf(u8 ** b, sz_t remaining) {
 		throw BUFFER_ERROR;
 	}
 
-	*b += decodedBytes + size * sizeof(T);
+	b += decodedBytes + size * sizeof(T);
 	readAt += decodedBytes;
 	return Container(
 		reinterpret_cast<T *>(readAt),
-		reinterpret_cast<T *>(*b)
+		reinterpret_cast<T *>(b)
 	); // guaranteed copy ellsion in c++17
 }
 
@@ -379,7 +373,7 @@ typename std::enable_if<has_const_iterator<Container>::value
 	&& !is_std_array<Container>::value
 	&& !std::is_arithmetic<typename Container::value_type>::value,
 	Container>::type // reads array of arrays
-readFromBuf(u8 ** b, sz_t remaining) {
+readFromBuf(const u8 *& b, sz_t remaining) {
 	using T = typename Container::value_type;
 
 	if (!remaining) {
@@ -387,21 +381,21 @@ readFromBuf(u8 ** b, sz_t remaining) {
 	}
 
 	sz_t decodedBytes;
-	u64 size = decodeUnsignedVarint(*b, decodedBytes, remaining);
+	u64 size = decodeUnsignedVarint(b, decodedBytes, remaining);
 
 	if (remaining - decodedBytes < size) { /* size of the elements will be 1 at least */
 		throw BUFFER_ERROR;
 	}
 
-	*b += decodedBytes;
+	b += decodedBytes;
 	remaining -= decodedBytes;
 
 	Container c;
 	c.reserve(size); // XXX: could fill ram lol
 	while (size-- > 0) {
-		u8 * prev = *b;
+		u8 * prev = b;
 		c.emplace_back(readFromBuf<T>(b, remaining));
-		remaining -= *b - prev;
+		remaining -= b - prev;
 	}
 
 	return c; // NRVO pls
@@ -409,26 +403,26 @@ readFromBuf(u8 ** b, sz_t remaining) {
 
 // idk if this is optimal
 template<class Tuple, std::size_t... Is>
-Tuple tupleFromBuf(u8 ** b, sz_t remaining, std::index_sequence<Is...>) {
-	u8 * start = *b;
-	return Tuple{readFromBuf<typename std::tuple_element<Is, Tuple>::type>(b, remaining - (*b - start))...};
+Tuple tupleFromBuf(const u8 *& b, sz_t remaining, std::index_sequence<Is...>) {
+	u8 * start = b;
+	return Tuple{readFromBuf<typename std::tuple_element<Is, Tuple>::type>(b, remaining - (b - start))...};
 }
 
 template<class Tuple>
 typename std::enable_if<is_tuple<Tuple>::value,
 	Tuple>::type
-readFromBuf(u8 ** b, sz_t remaining) {
+readFromBuf(const u8 *& b, sz_t remaining) {
 	return tupleFromBuf<Tuple>(b, remaining, std::make_index_sequence<std::tuple_size<Tuple>::value>{});
 }
 
 template<class Array, std::size_t... Is>
-Array staticArrayFromBuf(u8 ** b, std::index_sequence<Is...>) {
+Array staticArrayFromBuf(const u8 *& b, std::index_sequence<Is...>) {
 	using T = typename Array::value_type;
 
-	u8 * start = *b;
-	*b += sizeof(T) * sizeof... (Is);
+	u8 * start = b;
+	b += sizeof(T) * sizeof... (Is);
 
-	if constexpr (sizeof(T) == 1) {
+	if /*constexpr*/ (sizeof(T) == 1) {
 		return Array{start[Is]...};
 	} else {
 		return Array{buf::readBE<T>(start + Is * sizeof(T))...};
@@ -438,11 +432,11 @@ Array staticArrayFromBuf(u8 ** b, std::index_sequence<Is...>) {
 template<class Array>
 typename std::enable_if<is_std_array<Array>::value,
 	Array>::type
-readFromBuf(u8 ** b, sz_t remaining) {
+readFromBuf(const u8 *& b, sz_t remaining) {
 	using T = typename Array::value_type;
 	constexpr sz_t size = std::tuple_size<Array>::value;
 
-	if constexpr (std::is_arithmetic<T>::value) {
+	if /*constexpr*/ (std::is_arithmetic<T>::value) {
 		if (remaining < sizeof(T) * size) {
 			throw BUFFER_ERROR;
 		}
@@ -457,7 +451,7 @@ readFromBuf(u8 ** b, sz_t remaining) {
 template<class OptionalValue>
 typename std::enable_if<is_optional<OptionalValue>::value,
 	OptionalValue>::type
-readFromBuf(u8 ** b, sz_t remaining) {
+readFromBuf(const u8 *& b, sz_t remaining) {
 	using T = typename OptionalValue::value_type;
 
 	bool isValuePresent = readFromBuf<bool>(b, remaining);
@@ -467,14 +461,14 @@ readFromBuf(u8 ** b, sz_t remaining) {
 		return readFromBuf<T>(b, remaining);
 	}
 
-	return std::nullopt;
+	return estd::nullopt;
 }
 
 #undef BUFFER_ERROR
 } // namespace pktdetail
 
 template<u8 opCode, typename... Args>
-Packet::Packet(Args... args)
+Packet<opCode, Args...>::Packet(Args... args)
 : PrepMsg(nullptr) {
 	using namespace pktdetail;
 	constexpr bool isFixedSize = are_all_arithmetic<Args...>::value;
@@ -489,22 +483,22 @@ Packet::Packet(Args... args)
 
 	*to++ = opCode;
 
-	if constexpr (isFixedSize) {
+	//if /*constexpr*/ (isFixedSize) {
 		//u8 useless[] {((to += buf::writeBE(to, args)), u8(0))...};
-		(buf::writeBE(to, args), ...);
-	} else {
+	//	(buf::writeBE(to, args), ...);
+	//} else {
 		//u8 useless[] {(writeToBuf(&to, args, size - (to - start)), u8(0))...};
-		(writeToBuf(&to, args, size - (to - start)), ...);
+		(writeToBuf(to, args, size - (to - start)), ...);
 		assert(sz_t(to - start) == size);
-	}
+	//}
 
 	PrepMsg::setPrepared(start, size);
 }
 
 template<u8 opCode, typename... Args>
-std::tuple<Args...> Packet::fromBuffer(u8 * buffer, sz_t size) {
+std::tuple<Args...> Packet<opCode, Args...>::fromBuffer(const u8 * buffer, sz_t size) {
 	using namespace pktdetail;
-	u8 * start = buffer;
+	const u8 * start = buffer;
 
 	// fast size check
 	constexpr sz_t expectedSize = add(sizeof(Args)...);
@@ -516,7 +510,7 @@ std::tuple<Args...> Packet::fromBuffer(u8 * buffer, sz_t size) {
 }
 
 template<u8 opCode, typename... Args>
-void Packet::one(uWS::WebSocket<uWS::SERVER> * ws, Args... args) {
+void Packet<opCode, Args...>::one(uWS::WebSocket<uWS::SERVER> * ws, Args... args) {
 	using namespace pktdetail;
 	constexpr bool isFixedSize = are_all_arithmetic<Args...>::value;
 
@@ -530,14 +524,14 @@ void Packet::one(uWS::WebSocket<uWS::SERVER> * ws, Args... args) {
 
 	*to++ = opCode;
 
-	if constexpr (isFixedSize) {
+	//if /*constexpr*/ (isFixedSize) {
 		//u8 useless[] {((to += buf::writeBE(to, args)), u8(0))...};
-		(buf::writeBE(to, args), ...);
-	} else {
+	//	(buf::writeBE(to, args), ...);
+	//} else {
 		//u8 useless[] {(writeToBuf(&to, args, size - (to - start)), u8(0))...};
-		(writeToBuf(&to, args, size - (to - start)), ...);
+		(writeToBuf(to, args, size - (to - start)), ...);
 		assert(sz_t(to - start) == size);
-	}
+	//}
 
-	ws->send(start, size, uWS::BINARY);
+	ws->send(reinterpret_cast<char *>(start), size, uWS::BINARY);
 }

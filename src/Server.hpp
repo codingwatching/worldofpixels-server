@@ -4,7 +4,7 @@
 #include <memory>
 
 #include <ConnectionManager.hpp>
-#include <CommandManager.hpp>
+//#include <CommandManager.hpp>
 #include <Storage.hpp>
 #include <WorldManager.hpp>
 #include <PacketReader.hpp>
@@ -33,7 +33,7 @@ class Server {
 	WorldManager wm;
 	PacketReader pr;
 	ApiProcessor api;
-	CommandManager cmd;
+	//CommandManager cmd;
 	ConnectionManager conn;
 
 	u32 saveTimer;

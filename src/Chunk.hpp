@@ -4,21 +4,29 @@
 #include <vector>
 #include <mutex>
 #include <shared_mutex>
+#include <bitset>
 
 #include <misc/explints.hpp>
 #include <misc/color.hpp>
 #include <misc/PngImage.hpp>
+#include <misc/utils.hpp>
 
 class WorldStorage;
 
 class Chunk {
 public:
 	using Pos = i32;
+	using ProtPos = i32;
 
 	static constexpr sz_t size = 512;
 	static constexpr sz_t protectionAreaSize = 16;
 
+	// pc**2 = dimensions of the protection array for chunks
 	static constexpr sz_t pc = size / protectionAreaSize;
+
+	static constexpr u32 pcShift  = popc(pc - 1);
+	static constexpr u32 pSizeShift  = popc(protectionAreaSize - 1);
+	static constexpr u32 posShift = popc(size - 1);
 
 private:
 	mutable std::shared_timed_mutex sm;
@@ -42,8 +50,8 @@ public:
 
 	bool setPixel(u16 x, u16 y, RGB_u);
 
-	void setProtectionGid(u8 x, u8 y, u32 gid);
-	u32 getProtectionGid(u8 x, u8 y) const;
+	void setProtectionGid(ProtPos x, ProtPos y, u32 gid);
+	u32 getProtectionGid(ProtPos x, ProtPos y) const;
 
 	bool isPngCacheOutdated() const;
 	void unsetCacheOutdatedFlag();

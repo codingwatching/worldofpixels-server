@@ -18,7 +18,8 @@ enum tc : u8 {
 	/*PLAYER_JOIN,
 	PLAYER_LEFT,*/
 	WORLD_UPDATE,
-	CHAT_MESSAGE
+	CHAT_MESSAGE,
+	PROTECTION_UPD
 
 	/*SET_ID,
 	UPDATE,
@@ -26,11 +27,10 @@ enum tc : u8 {
 	TELEPORT,
 	PERMISSIONS,
 	CAPTCHA_REQUIRED,
-	SET_PQUOTA,
-	CHUNK_PROTECTED*/
+	SET_PQUOTA*/
 };
 
-using Cursor = std::tuple<Player::Id, Player::Pos, Player::Pos, Player::Tid>;
+using Cursor = std::tuple<Player::Id, World::Pos, World::Pos, Player::Step, Player::Tid>;
 using Pixel  = std::tuple<World::Pos, World::Pos, u8, u8, u8>;
 
 } // namespace net
@@ -40,16 +40,13 @@ using AuthProgress = Packet<net::tc::AUTH_PROGRESS, std::type_index>;
 using AuthOk       = Packet<net::tc::AUTH_OK,       std::string, u64, std::string, bool>;
 using AuthError    = Packet<net::tc::AUTH_ERROR,    std::type_index>;
 
-// to be deleted (?)
-using CmdList   = Packet<net::tc::CMD_LIST,   std::vector<std::tuple<std::string, std::vector<std::tuple<std::type_index, std::string, std::vector<std::tuple<std::string, std::type_index, bool>>>>>>>;
-using CmdResult = Packet<net::tc::CMD_RESULT, bool, std::string>; // jsonstring
-
 using PlayersShow = Packet<net::tc::SHOW_PLAYERS, std::vector<std::tuple<UserInfo::Id, net::Cursor>>>;
 using PlayersHide = Packet<net::tc::HIDE_PLAYERS, std::vector<Player::Id>>;
 using ClientData  = Packet<net::tc::CLIENT_DATA,  net::Cursor>;
 
-using WorldUpdate = Packet<net::tc::WORLD_UPDATE, std::vector<net::Cursor>, std::vector<net::Pixel>>;
-using ChatMessage = Packet<net::tc::CHAT_MESSAGE, UserInfo::Id, std::string>;
+using WorldUpdate      = Packet<net::tc::WORLD_UPDATE,   std::vector<net::Cursor>, std::vector<net::Pixel>>;
+using ChatMessage      = Packet<net::tc::CHAT_MESSAGE,   UserInfo::Id, std::string>;
+using ProtectionUpdate = Packet<net::tc::PROTECTION_UPD, Chunk::ProtPos, Chunk::ProtPos, u32>;
 
 // Packet definitions, serverbound
 

@@ -11,7 +11,7 @@ OPT_REL   = -O2
 LD_REL    = -s
 OPT_DBG   = -Og -g
 
-CPPFLAGS += -std=c++14
+CPPFLAGS += -std=c++17
 CPPFLAGS += -MMD -MP
 
 UWS       = ./lib/uWebSockets

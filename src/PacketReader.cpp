@@ -1,7 +1,9 @@
 #include "PacketReader.hpp"
 
-#include <uWS.h>
+#include <Client.hpp>
+
 #include <iostream>
+#include <uWS.h>
 
 PacketReader::PacketReader(uWS::Hub& h) {
 	h.onMessage([this] (uWS::WebSocket<uWS::SERVER> * ws, const char * msg, sz_t len, uWS::OpCode oc) {
@@ -19,7 +21,7 @@ PacketReader::PacketReader(uWS::Hub& h) {
 		cl->updateLastActionTime();
 
 		try {
-			search->second(*cl, msg + 1, len - 1);
+			search->second(*cl, reinterpret_cast<const u8 *>(msg + 1), len - 1);
 		} catch (const std::length_error& e) {
 			std::cout << "Exception on packet read: " << e.what() << std::endl;
 			ws->close(1002);

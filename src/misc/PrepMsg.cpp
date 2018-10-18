@@ -17,14 +17,14 @@ PrepMsg::~PrepMsg() {
 	delPrepared();
 }
 
-void * PrepMsg::getPrepared() {
+void * PrepMsg::getPrepared() const {
 	return message;
 }
 
 void PrepMsg::setPrepared(u8 * buf, sz_t s) {
 	delPrepared();
 	message = uWS::WebSocket<uWS::SERVER>::prepareMessage(
-		static_cast<char *>(buf), s, uWS::BINARY
+		reinterpret_cast<char *>(buf), s, uWS::BINARY, false, nullptr
 	);
 }
 

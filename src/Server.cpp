@@ -37,7 +37,7 @@ Server::Server(std::string basePath)
   wm(tb, tc, s),
   pr(h),
   api(h, "status"),
-  cmd(*this),
+  //cmd(*this),
   conn(h, "OWOP"),
   saveTimer(0) {
 	std::cout << "Admin password set to: " << s.getAdminPass() << "." << std::endl;

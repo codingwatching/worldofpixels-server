@@ -5,7 +5,7 @@
 #include <misc/utils.hpp>
 
 #include <World.hpp>
-#include <Packet.cpp>
+#include <misc/PrepMsg.hpp>
 
 Client::Client(uWS::WebSocket<uWS::SERVER> * ws, World& w, Player::Builder& pb, UserInfo u, std::string ip)
 : ws(ws),
@@ -42,7 +42,7 @@ UserInfo& Client::getUserInfo() {
 	return ui;
 }
 
-void Client::send(Packet& p) {
+void Client::send(const PrepMsg& p) {
 	ws->sendPrepared(static_cast<uWS::WebSocket<uWS::SERVER>::PreparedMessage *>(p.getPrepared()));
 }
 

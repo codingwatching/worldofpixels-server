@@ -12,8 +12,14 @@
 static_assert((Chunk::size & (Chunk::size - 1)) == 0,
 	"Chunk::size must be a power of 2");
 
+static_assert((Chunk::protectionAreaSize & (Chunk::protectionAreaSize - 1)) == 0,
+	"Chunk::protectionAreaSize must be a power of 2");
+
 static_assert((Chunk::size % Chunk::protectionAreaSize) == 0,
 	"Chunk::size must be divisible by Chunk::protectionAreaSize");
+
+static_assert((Chunk::pc & (Chunk::pc - 1)) == 0,
+	"size / protectionAreaSize must result in a power of 2");
 
 Chunk::Chunk(Pos x, Pos y, const WorldStorage& ws)
 : lastAction(jsDateNow()),
@@ -32,7 +38,7 @@ Chunk::Chunk(Pos x, Pos y, const WorldStorage& ws)
 		pngFileOutdated = true;
   	};
 
-	data.setChunkReader("woPp", [this, fail, &readerCalled] (u8 * d, sz_t size) {
+	data.setChunkReader("woPp", [this, fail{std::move(fail)}, &readerCalled] (u8 * d, sz_t size) {
 		readerCalled = true;
 		try {
 			if (rle::getItems<u32>(d, size) != protectionData.size()) {
@@ -61,7 +67,7 @@ Chunk::Chunk(Pos x, Pos y, const WorldStorage& ws)
 			protectionData.fill(0);
 		}
 	} else {
-		data.allocate(512, 512, ws.getBackgroundColor());
+		data.allocate(Chunk::size, Chunk::size, ws.getBackgroundColor());
 		protectionData.fill(0);
 	}
 }
@@ -89,6 +95,9 @@ Chunk::~Chunk() {
 }
 
 bool Chunk::setPixel(u16 x, u16 y, RGB_u clr) {
+	x &= Chunk::size - 1;
+	y &= Chunk::size - 1;
+
 	if (data.getPixel(x, y).rgb != clr.rgb) {
 		lastAction = jsDateNow();
 #warning "Fix possible concurrent access"
@@ -100,21 +109,23 @@ bool Chunk::setPixel(u16 x, u16 y, RGB_u clr) {
 	return false;
 }
 
-void Chunk::setProtectionGid(u8 x, u8 y, u32 gid) {
+void Chunk::setProtectionGid(ProtPos x, ProtPos y, u32 gid) {
 	//lastAction = jsDateNow();
-	x &= 0x1F;
-	y &= 0x1F;
+	x &= Chunk::pc - 1;
+	y &= Chunk::pc - 1;
+
 	pngFileOutdated = true;
 	pngCacheOutdated = true;
 	std::unique_lock<std::shared_timed_mutex> _(sm);
-	protectionData[y * 32 + x] = gid;
+	protectionData[y * Chunk::pc + x] = gid;
 }
 
-u32 Chunk::getProtectionGid(u8 x, u8 y) const {
-	x &= 0x1F;
-	y &= 0x1F;
+u32 Chunk::getProtectionGid(ProtPos x, ProtPos y) const {
+	x &= Chunk::pc - 1;
+	y &= Chunk::pc - 1;
+
 	//std::shared_lock<std::shared_timed_mutex> _(sm);
-	return protectionData[y * 32 + x];
+	return protectionData[y * Chunk::pc + x];
 }
 
 bool Chunk::isPngCacheOutdated() const {

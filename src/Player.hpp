@@ -5,14 +5,15 @@
 
 #include <nlohmann/json_fwd.hpp>
 
-#include <World.hpp>
 #include <misc/explints.hpp>
 #include <misc/color.hpp>
 #include <misc/Bucket.hpp>
 
+class World; // using World::Pos = i32;
+using WorldPos = i32;
 class Client;
-class World;
 class UserInfo;
+class PrepMsg;
 
 class Player {
 public:
@@ -25,8 +26,8 @@ private:
 	Client& cl;
 	World& world;
 	const Id playerId;
-	World::Pos x;
-	World::Pos y;
+	WorldPos x;
+	WorldPos y;
 	Bucket chatLimiter;
 	Bucket paintLimiter;
 	bool chatAllowed;
@@ -38,7 +39,7 @@ private:
 public:
 	Player(const Player&) = delete;
 
-	Player(Client&, World&, Id, Pos, Pos,
+	Player(Client&, World&, Id, WorldPos, WorldPos,
 		Bucket, Bucket, bool, bool, bool);
 	Player(const Player::Builder&);
 	~Player();
@@ -53,18 +54,19 @@ public:
 
 	void setPaintRate(u16 rate, u16 per);
 
-	Pos getX() const;
-	Pos getY() const;
+	WorldPos getX() const;
+	WorldPos getY() const;
+	Step getStep() const;
 	Id getPid() const;
 
-	void teleportTo(Pos x, Pos y);
+	void teleportTo(WorldPos x, WorldPos y);
 	void tell(const std::string&);
 
-	void tryPaint(World::Pos x, World::Pos y, RGB_u);
-	void tryMoveTo(Pos x, Pos y, Tid toolId);
+	void tryPaint(WorldPos x, WorldPos y, RGB_u);
+	void tryMoveTo(WorldPos x, WorldPos y, Step precision, Tid toolId);
 	void tryChat(const std::string&);
 
-	void send(Packet&);
+	void send(const PrepMsg&);
 
 	bool operator ==(const Player&) const;
 	bool operator  <(const Player&) const;
@@ -74,8 +76,8 @@ class Player::Builder {
 	Client * cl;
 	World * wo;
 	Player::Id playerId;
-	Player::Pos startX;
-	Player::Pos startY;
+	WorldPos startX;
+	WorldPos startY;
 	Bucket paintLimiter;
 	Bucket chatLimiter;
 	bool chatAllowed;
@@ -88,7 +90,7 @@ public:
 	Builder& setClient(Client&);
 	Builder& setWorld(World&);
 	Builder& setPlayerId(Player::Id);
-	Builder& setSpawnPoint(Player::Pos, Player::Pos);
+	Builder& setSpawnPoint(WorldPos, WorldPos);
 	Builder& setPaintBucket(Bucket);
 	Builder& setChatBucket(Bucket);
 	Builder& setChatAllowed(bool);

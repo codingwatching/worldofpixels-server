@@ -6,7 +6,7 @@
 
 #include <Client.hpp>
 #include <ConnectionProcessor.hpp>
-#include <Packet.hpp>
+#include <PacketDefinitions.hpp>
 
 ClosedConnection::ClosedConnection(Client& c)
 : ws(c.getWs()),
@@ -142,7 +142,7 @@ void ConnectionManager::handleFail(IncomingConnection& ic) {
 void ConnectionManager::handleEnd(IncomingConnection& ic) {
 	for (auto& p : processors) {
 		if (!p->endCheck(ic)) {
-			AuthError::one(ic.ws, typeid(*pr.get()));
+			AuthError::one(ic.ws, typeid(*p.get()));
 			handleFail(ic);
 			handleDisconnect(ic, true);
 			return;
