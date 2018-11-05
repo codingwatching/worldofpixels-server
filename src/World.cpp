@@ -222,7 +222,7 @@ bool World::verifyChunkPos(Chunk::Pos x, Chunk::Pos y) {
 Chunk& World::getChunk(Chunk::Pos x, Chunk::Pos y) {
 	auto search = chunks.find(key(x, y));
 	if (search == chunks.end()) {
-		WorldStorage::maybeConvert(x, y);
+		WorldStorage::maybeConvertChunk(x, y);
 
 		search = chunks.emplace(std::piecewise_construct,
 			std::forward_as_tuple(key(x, y)),

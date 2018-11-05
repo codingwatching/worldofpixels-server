@@ -124,7 +124,7 @@ Server::Server(std::string basePath)
 	conn.addToBeg<BanChecker>(bm);
 	conn.addToBeg<ConnectionCounter>();
 
-	conn.onSocketChecked([this] (IncomingConnection& ic) {
+	conn.onSocketChecked([this] (IncomingConnection& ic) -> Client * {
 		World& w = wm.getOrLoadWorld(ic.ci.world);
 		Player::Builder pb;
 		w.configurePlayerBuilder(pb);
@@ -134,10 +134,6 @@ Server::Server(std::string basePath)
 	//pr.set<>
 
 	h.getDefaultGroup<uWS::SERVER>().startAutoPing(15000);
-}
-
-void Server::broadcastmsg(const std::string& msg) {
-	h.getDefaultGroup<uWS::SERVER>().broadcast(msg.c_str(), msg.size(), uWS::TEXT);
 }
 
 bool Server::listenAndRun() {

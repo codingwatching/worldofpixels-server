@@ -52,7 +52,7 @@ void ConnectionCounter::disconnected(ClosedConnection& c) {
 nlohmann::json ConnectionCounter::getPublicInfo() {
 	return {
 		{"total", total},
-		{"totalChecked", totalChecked},
+		{"totalOk", totalChecked},
 		{"currentChecking", currentChecking},
 		{"currentActive", currentActive},
 		{"maxConnsPerIp", maxConnsPerIp}

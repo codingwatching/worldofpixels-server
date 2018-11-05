@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <array>
 
+#include <Chunk.hpp>
+
 #include <misc/PngImage.hpp>
 #include <misc/rle.hpp>
 #include <misc/BufferHelper.hpp>
@@ -100,9 +102,20 @@ u16 WorldStorage::getPixelRate() {
 RGB_u WorldStorage::getBackgroundColor() const {
 	RGB_u clr = {255, 255, 255};
 	if (hasProp("bgcolor")) try {
-		clr.rgb = stoul(getProp("bgcolor"));
-		// switch bytes around so they're read in the correct HTML color order
-		//clr.rgb = (clr.rgb & 0xFF) << 16 | (clr.rgb & 0xFF00) | (clr.rgb & 0xFF0000) >> 16;
+		std::string s(getProp("bgcolor"));
+		if (s.compare(0, 2, "0x") != 0) {
+			// rrggbb
+			if (s.size() < 8) {
+				s += std::string(8 - s.size(), '0');
+			}
+
+			clr.rgb = stoul(s, nullptr, 16);
+			// switch bytes around so they're read in the correct HTML color order
+			std::swap(clr.r, clr.a);
+			std::swap(clr.g, clr.b);
+		} else {
+			clr.rgb = stoul(s, nullptr, 16);
+		}
 	} catch(const std::exception& e) {
 		std::cerr << "Invalid color specified in world cfg" << worldName << ", resetting. (" << e.what() << ")" << std::endl;
 		//delProp("bgcolor");
@@ -127,7 +140,7 @@ void WorldStorage::setPixelRate(u16 v) {
 }
 
 void WorldStorage::setBackgroundColor(RGB_u clr) {
-	setProp("bgcolor", std::to_string(clr.rgb));
+	setProp("bgcolor", std::string("0x") + n2hexstr(clr.rgb));
 }
 
 void WorldStorage::setMotd(std::string s) {
@@ -152,64 +165,120 @@ void WorldStorage::convertNext() {
 	maybeConvert(p.x, p.y);
 }
 
+void WorldStorage::maybeConvertChunk(Chunk::Pos x, Chunk::Pos y) {
+	int times = 512 / Chunk::size; // assuming result is power of 2
+	maybeConvert(x >> times - 1, y >> times - 1);
+}
+
 void WorldStorage::maybeConvert(i32 x, i32 y) {
 	twoi32 pos;
 	pos.x = x;
 	pos.y = y;
 
+	if (Chunk::size > 512) {
+		throw std::logic_error("can't convert chunks bigger than 512x512");
+	}
+
 	if (remainingOldClusters.erase(pos) == 0) {
 		return;
 	}
+	// 512 = old region file dimensions
+	int times = 512 / Chunk::size;
+	std::unique_ptr<u8[]> buf;
 
-	PngImage result(512, 512, getBackgroundColor());
 	{
 		std::string name(worldDir + "/r." + std::to_string(x) + "." + std::to_string(y) + ".pxr");
 		std::ifstream file(name, std::ios::binary | std::ios::ate);
 		sz_t size = file.tellg();
 		file.seekg(0);
-		auto buf(std::make_unique<u8[]>(size));
+		buf = std::make_unique<u8[]>(size);
 		file.read((char*)buf.get(), size);
 		file.close();
 		if (int err = std::remove(name.c_str())) {
 			std::string e("Couldn't delete old cluster file " + name);
 			std::perror(e.c_str());
 		}
-		u8 * ptr = buf.get();
-		result.applyTransform([&result, ptr] (u32 x, u32 y) -> RGB_u {
-			u32 cx = x >> 4;
-			u32 cy = y >> 4;
-			const u32 lookup = 3 * ((cx & 31) + (cy & 31) * 32);
-			u32 pos = ((ptr[lookup + 1] & 0xFF) << 16)
-							| ((ptr[lookup] & 0xFF) << 8) | (ptr[lookup + 2] & 0xFF);
-			if (pos == 0) {
-				return result.getPixel(x, y);
+	}
+
+	u8 * ptr = buf.get();
+	for (int i = 0; i < times; i++) {
+		for (int j = 0; j < times; j++) {
+			PngImage result(Chunk::size, Chunk::size, getBackgroundColor());
+
+			u32 offx = j * (32 / times);
+			u32 offy = i * (32 / times);
+
+			result.applyTransform([&result, ptr, offx, offy] (u32 x, u32 y) -> RGB_u {
+				u32 cx = offx + (x >> 4);
+				u32 cy = offy + (y >> 4);
+
+				const u32 lookup = 3 * ((cx & 31) + (cy & 31) * 32);
+				u32 pos = ((ptr[lookup + 1] & 0xFF) << 16)
+						| ((ptr[lookup] & 0xFF) << 8) | (ptr[lookup + 2] & 0xFF);
+
+				if (pos == 0) {
+					return result.getPixel(x, y);
+				}
+
+				//std::cout << pos << std::endl;
+				u8 * ptrpx = ptr + pos + ((y & 0xF) * 16 + (x & 0xF)) * 3;
+				RGB_u px;
+				px.r = ptrpx[0];
+				px.g = ptrpx[1];
+				px.b = ptrpx[2];
+				return px;
+			});
+
+			i32 chunkx = x * times + j;
+			i32 chunky = y * times + i;
+
+			std::string path(getChunkFilePath(chunkx, chunky));
+			auto search = pclust.find(pos.pos);
+			if (search != pclust.end()) {
+				std::array<u32, Chunk::pc * Chunk::pc> prtect;
+				prtect.fill(0);
+				std::vector<twoi32>& dat = search->second;
+
+				dat.erase(std::remove_if(dat.begin(), dat.end(), [&prtect, chunkx, chunky] (twoi32 p) {
+					if (Chunk::protectionAreaSize > 16) {
+						throw std::logic_error("can't convert to bigger protection area sizes");
+					}
+
+					// this chunkx
+					i32 tcx = p.x >> Chunk::pcShift;
+					i32 tcy = p.y >> Chunk::pcShift;
+					if (!(tcx == chunkx && tcy == chunky)) {
+						return false;
+					}
+
+					u16 pTimes = 16 / Chunk::protectionAreaSize;
+
+
+					u16 x = p.x * pTimes & Chunk::pc - 1;
+					u16 y = p.y * pTimes & Chunk::pc - 1;
+
+					for (int k = 0; k < pTimes; k++) {
+						for (int l = 0; l < pTimes; l++) {
+							prtect[(y + k) * Chunk::pc + (x + l)] = 1;
+						}
+					}
+
+					return true;
+				}), dat.end());
+
+				if (dat.size() == 0) {
+					pclust.erase(search);
+				}
+
+				result.setChunkWriter("woPp", [&prtect] {
+					return rle::compress(prtect.data(), prtect.size());
+				});
+				result.writeFile(path); // scoped array, can't fall through
+				continue;
 			}
-			//std::cout << pos << std::endl;
-			u8 * ptrpx = ptr + pos + ((y & 0xF) * 16 + (x & 0xF)) * 3;
-			RGB_u px;
-			px.r = ptrpx[0];
-			px.g = ptrpx[1];
-			px.b = ptrpx[2];
-			return px;
-		});
-	}
-	std::string path(getChunkFilePath(x, y));
-	auto search = pclust.find(pos.pos);
-	if (search != pclust.end()) {
-		std::array<u32, 32 * 32> prtect;
-		prtect.fill(0);
-		std::vector<twoi32>& dat = search->second;
-		for (twoi32 p : dat) {
-			prtect[(p.y & 0x1F) * 32 + (p.x & 0x1F)] = 1;
+			result.writeFile(path);
 		}
-		pclust.erase(search);
-		result.setChunkWriter("woPp", [&prtect] {
-			return rle::compress(prtect.data(), prtect.size());
-		});
-		result.writeFile(path); // scoped array, can't fall through
-		return;
 	}
-	result.writeFile(path);
 }
 
 void WorldStorage::saveProtectionData() {

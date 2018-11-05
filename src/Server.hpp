@@ -41,12 +41,8 @@ class Server {
 public:
 	Server(std::string basePath = ".");
 
-	void broadcastmsg(const std::string&);
-
 	bool listenAndRun();
-
 	void kickInactivePlayers();
-
 	void stop();
 
 private:

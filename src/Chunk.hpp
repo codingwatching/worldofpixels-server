@@ -18,7 +18,7 @@ public:
 	using Pos = i32;
 	using ProtPos = i32;
 
-	static constexpr sz_t size = 512;
+	static constexpr sz_t size = 256;
 	static constexpr sz_t protectionAreaSize = 16;
 
 	// pc**2 = dimensions of the protection array for chunks

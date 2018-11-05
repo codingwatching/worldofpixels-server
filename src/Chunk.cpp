@@ -39,16 +39,19 @@ Chunk::Chunk(Pos x, Pos y, const WorldStorage& ws)
   	};
 
 	data.setChunkReader("woPp", [this, fail{std::move(fail)}, &readerCalled] (u8 * d, sz_t size) {
+		// returning false will throw
+		// instead of stopping the server, reset the protections
+		// for this chunk
 		readerCalled = true;
 		try {
 			if (rle::getItems<u32>(d, size) != protectionData.size()) {
 				fail();
-				return false;
+				return true;
 			}
 			rle::decompress(d, size, protectionData.data(), protectionData.size());
 		} catch(std::length_error& e) {
 			fail();
-			return false;
+			return true;
 		}
 		return true;
 	});

@@ -65,6 +65,7 @@ public:
 	void setGlobalModeratorsAllowed(bool);
 
 	void convertNext();
+	void maybeConvertChunk(i32, i32);
 	void maybeConvert(i32, i32);
 	void loadProtectionData();
 	void saveProtectionData();
