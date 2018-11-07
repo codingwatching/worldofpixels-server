@@ -3,48 +3,53 @@
 #include <uWS.h>
 #include <misc/utils.hpp>
 
-using ApiProcessor::Request;
-using ApiProcessor::Endpoint;
-using ApiProcessor::TemplatedEndpointBuilder;
-using ApiProcessor::TemplatedEndpoint;
+#include <nlohmann/json.hpp>
 
-ApiProcessor::ApiProcessor(uWS::Hub& h, std::string defaultRequest) {
+using Request = ApiProcessor::Request;
+using Endpoint = ApiProcessor::Endpoint;
+
+using TemplatedEndpointBuilder = ApiProcessor::TemplatedEndpointBuilder;
+
+template<typename... Args>
+using TemplatedEndpoint = ApiProcessor::TemplatedEndpoint<Args...>;
+
+ApiProcessor::ApiProcessor(uWS::Hub& h) {
 	// one connection can request multiple things before it closes
-	h.onHttpRequest([this, dr{std::move(defaultRequest)}] (uWS::HttpResponse * res, uWS::HttpRequest req, char * data, sz_t len, sz_t rem) {
-		RequestStorage * rs = static_cast<RequestStorage*>(res->getHttpSocket()->getUserData());
+	h.onHttpRequest([this] (uWS::HttpResponse * res, uWS::HttpRequest req, char * data, sz_t len, sz_t rem) {
+		std::shared_ptr<Request> * rs = static_cast<std::shared_ptr<Request> *>(res->getHttpSocket()->getUserData());
+
 		if (!rs) {
-			rs = new RequestStorage;
+			auto reqtmp(std::make_shared<Request>(res, &req));
+			rs = new std::shared_ptr<Request>(std::move(reqtmp));
 			res->getHttpSocket()->setUserData(rs);
 		} else {
-			rs->onCancel = nullptr; // I'm gonna get mad if requests can be made on the same socket before the last one completes
+			(*rs)->updateData(res, &req);
 		}
 
-		auto args(tokenize(req.getUrl().toString(), '/', true));
+		nlohmann::json j;
 
-		if (args.size() == 0) {
-			args.emplace_back(dr);
+		if (len != 0) {
+			j = nlohmann::json::parse(data, data + len, nullptr, false);
 		}
 
-		if (auto status = exec(res, *rs, std::move(args))) {
-			res->end("\"Unknown request\"", 17);
-		}
+		exec(*rs, std::move(j), tokenize(req.getUrl().toString(), '/', true));
+		(*rs)->invalidateData();
 	});
 
 	h.onCancelledHttpRequest([] (uWS::HttpResponse * res) {
-		RequestStorage * rs = static_cast<RequestStorage*>(res->getHttpSocket()->getUserData());
-		if (rs && rs->onCancel) {
-			rs->onCancel();
+		// requests only get cancelled when the requester disconnects, right?
+		if (auto * rs = static_cast<std::shared_ptr<Request> *>(res->getHttpSocket()->getUserData())) {
+			(*rs)->cancel(std::move(*rs));
+			delete rs;
+			res->getHttpSocket()->setUserData(nullptr);
 		}
-
-		delete rs;
-		res->getHttpSocket()->setUserData(nullptr);
 	});
 
 	h.onHttpDisconnection([] (uWS::HttpSocket<uWS::SERVER> * s) {
 		// this library is retarded so the disconnection handler is called
 		// before the cancelled requests handler, so i need to do hacky things
 		// if i don't want to use freed memory (there's no request completion handler), cool!
-		RequestStorage * rs = static_cast<RequestStorage*>(s->getUserData());
+		std::shared_ptr<Request> * rs = static_cast<std::shared_ptr<Request> *>(s->getUserData());
 		if (!s->outstandingResponsesHead) {
 			// seems like no cancelled request handler will be called
 			delete rs; // note: deleting null is ok
@@ -52,26 +57,118 @@ ApiProcessor::ApiProcessor(uWS::Hub& h, std::string defaultRequest) {
 	});
 }
 
-void ApiProcessor::set(std::string name, ApiProcessor::Func f) {
-	methods[name] = std::move(f);
+TemplatedEndpointBuilder ApiProcessor::on(ApiProcessor::Method m, ApiProcessor::AccessRules ar) {
+	return TemplatedEndpointBuilder(*this, m, ar);
 }
 
-ApiProcessor::Status ApiProcessor::exec(uWS::HttpResponse * r, RequestStorage& rs, ApiProcessor::ArgList args) {
-	if (args.size() == 0) return UNK_REQ;
+void ApiProcessor::add(ApiProcessor::Method m, std::unique_ptr<Endpoint> ep) {
+	definedEndpoints[m].emplace_back(std::move(ep));
+}
 
-	auto s = methods.find(args[0]);
-	if (s != methods.end()) {
-		return s->second(r, rs, std::move(args));
+void ApiProcessor::exec(std::shared_ptr<Request> r, nlohmann::json j, std::vector<std::string> args) {
+	int m = r->getData()->getMethod(); // lol
+
+	if (m == ApiProcessor::Method::INVALID) {
+		return;
 	}
 
-	return UNK_REQ;
+	for (auto& ep : definedEndpoints[m]) {
+		if (ep->verify(args)) {
+			ep->exec(std::move(r), std::move(j), std::move(args));
+			break;
+		}
+	}
+
+	r->writeStatus("501 Not Implemented");
+	r->end();
+}
+
+
+Request::Request(uWS::HttpResponse * res, uWS::HttpRequest * req)
+: res(res),
+  req(req) { }
+
+uWS::HttpResponse * Request::getResponse() {
+	return res;
+}
+
+uWS::HttpRequest * Request::getData() {
+	return req;
+}
+
+void Request::writeStatus(std::string s) {
+	s.reserve(s.size() + 12);
+	s.insert(0, "HTTP/1.1 ");
+	s.append("\r\n");
+
+	res->write(s.data(), s.size());
+}
+
+void Request::writeHeader(std::string key, std::string value) {
+	key.reserve(key.size() + value.size() + 8);
+	key.append(": ");
+	key.append(value);
+	key.append("\r\n");
+
+	res->write(key.data(), key.size());
+}
+
+void Request::end(const u8 * buf, sz_t size) {
+	if (res->hasHead) {
+		writeHeader("Content-Length", std::to_string(size));
+		res->write("\r\n", 2);
+	}
+
+	res->end(reinterpret_cast<const char *>(buf), size);
+}
+
+void Request::end(nlohmann::json j) {
+	std::string s(j.dump());
+	if (!res->hasHead) {
+		writeStatus("200 OK");
+	}
+
+	writeHeader("Content-Type", "application/json");
+	end(reinterpret_cast<const u8 *>(s.data()), s.size());
+}
+
+void Request::end() {
+	if (res->hasHead) {
+		res->write("Content-Length: 0\r\n\r\n", 21);
+	}
+
+	res->end();
+}
+
+bool Request::isCancelled() const {
+	return res == nullptr;
+}
+
+void Request::onCancel(std::function<void(std::shared_ptr<Request>)> f) {
+	cancelHandler = std::move(f);
+}
+
+void Request::cancel(std::shared_ptr<Request> r) {
+	// careful, this could be the last reference
+	if (cancelHandler) {
+		cancelHandler(std::move(r));
+	}
+}
+
+void Request::updateData(uWS::HttpResponse * res, uWS::HttpRequest * req) {
+	res = res;
+	req = req;
+	cancelHandler = nullptr;
+}
+
+void Request::invalidateData() {
+	req = nullptr;
 }
 
 
 
 
-
-TemplatedEndpointBuilder::TemplatedEndpointBuilder(ApiProcessor& tc, Method m, AccessRules ar)
+TemplatedEndpointBuilder::TemplatedEndpointBuilder(ApiProcessor& tc, ApiProcessor::Method m, ApiProcessor::AccessRules ar)
 : targetClass(tc),
   method(m),
   ar(ar) { }
@@ -92,71 +189,7 @@ TemplatedEndpointBuilder& TemplatedEndpointBuilder::var() {
 	return *this;
 }
 
-template<typename... Args>
-void TemplatedEndpointBuilder::end(std::function<void(std::shared_ptr<Request>, nlohmann::json, Args...)> f) {
-	targetClass.add(method, std::make_unique<TemplatedEndpoint<Args...>>(ar, std::move(f), std::move(varMarkers)));
-}
-
-
-
-
-
-
-
-Endpoint::Endpoint(AccessRules ar)
+Endpoint::Endpoint(ApiProcessor::AccessRules ar)
 : ar(ar) { }
 
 Endpoint::~Endpoint() { }
-
-
-
-
-
-
-
-template<typename... Args>
-TemplatedEndpoint<Args...>::TemplatedEndpoint(AccessRules ar, std::function<void(std::shared_ptr<Request>, nlohmann::json, Args...)> f, std::vector<std::string> path)
-: Endpoint(ar),
-  handler(std::move(f)),
-  pathSections(std::move(path)) {
-  	sz_t j = 0;
-	for (sz_t i = 0; i < pathSections.size(); i++) {
-		if (pathSections[i].size() == 0) {
-			if (j == varPositions.size()) {
-				throw std::runtime_error("Templated arg count != Path var count");
-			}
-
-			varPositions[j++] = i;
-		}
-	}
-
-	if (j + 1 != varPositions.size()) {
-		throw std::runtime_error("Templated arg count != Path var count");
-	}
-}
-
-template<typename... Args>
-bool TemplatedEndpoint<Args...>::verify(const std::vector<std::string>& args) {
-	if (args.size() != pathSections.size()) {
-		return false;
-	}
-
-	for (sz_t i = 0; i < pathSections.size(); i++) {
-		if (pathSections[i].size() != 0 && pathSections[i] != args[i]) {
-			return false;
-		}
-	}
-
-	return true;
-}
-
-template<typename... Args>
-void TemplatedEndpoint<Args...>::exec(std::shared_ptr<Request> r, nlohmann::json j, const std::vector<std::string>& args) {
-	execImpl(std::move(r), std::move(j), args, std::make_index_sequence<sizeof... (Args)>{});
-}
-
-template<typename... Args>
-template<std::size_t... Is>
-void TemplatedEndpoint<Args...>::execImpl(std::shared_ptr<Request> r, nlohmann::json j, const std::vector<std::string>& args, std::index_sequence<Is...>) {
-	handler(std::move(r), std::move(j), fromString<Args>(args[varPositions[Is]])...);
-}

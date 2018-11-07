@@ -36,7 +36,7 @@ Server::Server(std::string basePath)
   hcli(h.getLoop()),
   wm(tb, tc, s),
   pr(h),
-  api(h, "status"),
+  api(h),
   //cmd(*this),
   conn(h, "OWOP"),
   saveTimer(0) {
@@ -46,7 +46,7 @@ Server::Server(std::string basePath)
 	stopCaller->setData(this);
 	tb.setWorkerThreadSchedulingPriorityToLowestPossibleValueAllowedByTheOperatingSystem();
 
-	api.set("status", [this] (uWS::HttpResponse * res, auto& rs, auto args) {
+	/*api.set("status", [this] (uWS::HttpResponse * res, auto& rs, auto args) {
 		std::string ip(res->getHttpSocket()->getAddress().address);
 
 		bool banned = bm.isBanned(ip);
@@ -111,7 +111,7 @@ Server::Server(std::string basePath)
 		}
 
 		return ApiProcessor::OK;
-	});
+	});*/
 
 	conn.addToBeg<ProxyChecker>(hcli, tc).setState(ProxyChecker::State::OFF);
 	conn.addToBeg<CaptchaChecker>(hcli).setState(CaptchaChecker::State::OFF);
