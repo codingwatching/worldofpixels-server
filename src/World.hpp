@@ -8,7 +8,6 @@
 #include <misc/color.hpp>
 #include <misc/explints.hpp>
 #include <misc/IdSys.hpp>
-#include <misc/fwd_uWS.h>
 
 #include <string>
 #include <set>
@@ -16,10 +15,12 @@
 #include <map>
 #include <vector>
 #include <tuple>
+#include <memory>
 #include <limits>
 
 class TaskBuffer;
 class Client;
+class Request;
 
 class World : public WorldStorage {
 public:
@@ -37,7 +38,7 @@ private:
 
 	std::set<std::reference_wrapper<Player>> players;
 	std::unordered_map<u64, Chunk> chunks;
-	std::map<u64, std::set<uWS::HttpResponse *>> ongoingChunkRequests;
+	std::map<u64, std::vector<std::shared_ptr<Request>>> ongoingChunkRequests;
 
 	std::vector<pixupd_t> pixelUpdates;
 	std::set<std::reference_wrapper<Player>> playerUpdates;
@@ -64,8 +65,8 @@ public:
 	static bool verifyChunkPos(Chunk::Pos x, Chunk::Pos y);
 	Chunk& getChunk(Chunk::Pos x, Chunk::Pos y);
 
-	bool sendChunk(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse *);
-	void cancelChunkRequest(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse *);
+	bool sendChunk(Chunk::Pos x, Chunk::Pos y, std::shared_ptr<Request>);
+	//void cancelChunkRequest(Chunk::Pos x, Chunk::Pos y, std::shared_ptr<Request>);
 
 	void setAreaProtection(Chunk::ProtPos x, Chunk::ProtPos y, bool state);
 

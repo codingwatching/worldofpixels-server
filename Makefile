@@ -9,7 +9,9 @@ TARGET    = out
 
 OPT_REL   = -O2
 LD_REL    = -s
-OPT_DBG   = -Og -g
+
+OPT_DBG   = -Og -g -fsanitize=address
+LD_DBG    = -fsanitize=address
 
 CPPFLAGS += -std=c++17
 CPPFLAGS += -MMD -MP
@@ -30,15 +32,15 @@ ifeq ($(OS),Windows_NT)
 	LDLIBS += -luv -lWs2_32 -lpsapi -liphlpapi -luserenv
 endif
 
-.PHONY: all g dirs clean clean-all
+.PHONY: all rel dirs clean clean-all
 
-all: CPPFLAGS += $(OPT_REL)
-all: LDFLAGS  += $(LD_REL)
+all: CPPFLAGS += $(OPT_DBG)
+all: LDFLAGS  += $(LD_DBG)
 all: dirs $(TARGET)
 
-g: CPPFLAGS += $(OPT_DBG)
-g: LDFLAGS  += $(LD_DBG)
-g: dirs $(TARGET)
+rel: CPPFLAGS += $(OPT_REL)
+rel: LDFLAGS  += $(LD_REL)
+rel: dirs $(TARGET)
 
 $(TARGET): $(OBJ_FILES) $(LIB_FILES)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)

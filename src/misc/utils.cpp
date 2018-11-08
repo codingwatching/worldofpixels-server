@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <chrono>
 #include <random>
 #include <locale>
@@ -17,7 +18,6 @@
 
 #ifdef __GNUG__
 	#define HAVE_CXA_DEMANGLE
-	#include <cstdlib>
 	#include <memory>
 	#include <cxxabi.h>
 #endif
@@ -157,4 +157,34 @@ const std::string& demangle(std::type_index type) { // XXX: also not thread safe
 
 std::type_index strToType(const std::string& s) {
 	return typeMap.at(s); // throws if not found
+}
+
+void urldecode(std::string& s) {
+	sz_t pos = 0;
+	while ((pos = s.find('%', pos)) != std::string::npos) {
+		const char * p = s.c_str() + pos; // "%??..."
+		if (s.size() - pos < 2 || !std::isxdigit(p[2])) {
+			throw std::length_error("Wrong URL percent encoding");
+		}
+
+		char tmp = p[3]; // str[str.size()] is guaranteed to be '\0'
+		s[pos + 3] = '\0';
+
+		unsigned long ch = std::strtoul(p + 1, nullptr, 16);
+		if (ch == -1ul) {
+			throw std::logic_error("Invalid URL percent encoding");
+		}
+
+		s[pos] = static_cast<char>(ch & 0xFF);
+
+		s[pos + 3] = tmp; // if the string ends here we would always be writing '\0'
+
+		s.erase(pos + 1, 2);
+	}
+}
+
+void urldecode(std::vector<std::string>& v) {
+	for (auto& s : v) {
+		urldecode(s);
+	}
 }

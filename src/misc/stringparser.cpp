@@ -5,34 +5,8 @@
 #include <limits>
 #include <misc/explints.hpp>
 
-template<>
-bool fromString(const std::string& s) {
-	if (s == "true") {
-		return true;
-	} else if (s == "false") {
-		return false;
-	}
-
-	throw std::invalid_argument("Invalid bool");
-}
-
-template<>
-std::string fromString(const std::string& s) {
-	return s;
-}
-
-template<>
-float fromString(const std::string& s) {
-	return std::stof(s);
-}
-
-template<>
-double fromString(const std::string& s) {
-	return std::stod(s);
-}
-
 template<typename T>
-typename std::enable_if<std::is_integral<T>::value, T>::type
+typename std::enable_if<!std::is_same<T, bool>::value && std::is_integral<T>::value, T>::type
 fromString(const std::string& s) {
 	using L = std::numeric_limits<T>;
 	if /*constexpr*/ (L::is_signed) {
@@ -43,6 +17,10 @@ fromString(const std::string& s) {
 
 		return n;
 	} else {
+		if (s.size() == 0 || s[0] == '-') {
+			throw std::out_of_range("Value too small");
+		}
+
 		u64 n = std::stoull(s);
 		if (n > L::max()) {
 			throw std::out_of_range("Value too big");
@@ -52,6 +30,38 @@ fromString(const std::string& s) {
 	}
 }
 
+template<typename T>
+typename std::enable_if<std::is_same<T, bool>::value, T>::type
+fromString(const std::string& s) {
+	if (s == "true") {
+		return true;
+	} else if (s == "false") {
+		return false;
+	}
+
+	throw std::invalid_argument("Invalid bool");
+}
+
+template<typename T>
+typename std::enable_if<std::is_same<T, std::string>::value, T>::type
+fromString(const std::string& s) {
+	return s;
+}
+
+template<typename T>
+typename std::enable_if<std::is_same<T, float>::value, T>::type
+fromString(const std::string& s) {
+	return std::stof(s);
+}
+
+template<typename T>
+typename std::enable_if<std::is_same<T, double>::value, T>::type
+fromString(const std::string& s) {
+	return std::stod(s);
+}
+
+
+// explicit instantiations
 template u8 fromString<u8>(const std::string&);
 template u16 fromString<u16>(const std::string&);
 template u32 fromString<u32>(const std::string&);
@@ -61,3 +71,8 @@ template i8 fromString<i8>(const std::string&);
 template i16 fromString<i16>(const std::string&);
 template i32 fromString<i32>(const std::string&);
 template i64 fromString<i64>(const std::string&);
+
+template bool fromString<bool>(const std::string&);
+template std::string fromString<std::string>(const std::string&);
+template float fromString<float>(const std::string&);
+template double fromString<double>(const std::string&);

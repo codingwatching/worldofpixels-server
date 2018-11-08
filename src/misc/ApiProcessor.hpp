@@ -11,30 +11,22 @@
 
 #include <nlohmann/json_fwd.hpp>
 
-/*
-api.onGet()
-   .path("view")
-   .var()
-   .var()
-   .var()
-.end([] (Request& r, nlohmann::json body, std::string s, i32 x, i32 y) {
-});
-*/
+class Request;
 
 class ApiProcessor {
 public:
-	class Request;
 	class Endpoint;
 	class TemplatedEndpointBuilder;
 
-	template<typename... Args>
+	template<typename Func, typename... Args>
 	class TemplatedEndpoint;
 
 	enum AccessRules : u8 {
 		FOREIGN = 0b00001,
 		GUEST   = 0b00010,
-		MOD     = 0b00100,
-		ADMIN   = 0b01000
+		USER    = 0b00100,
+		MOD     = 0b01000,
+		ADMIN   = 0b10000
 	};
 
 	enum Method {
@@ -57,14 +49,14 @@ private:
 public:
 	ApiProcessor(uWS::Hub&);
 
-	TemplatedEndpointBuilder on(Method, AccessRules);
+	TemplatedEndpointBuilder on(Method, AccessRules = AccessRules::USER);
 	void add(Method, std::unique_ptr<Endpoint>);
 
 private:
 	void exec(std::shared_ptr<Request>, nlohmann::json, std::vector<std::string>);
 };
 
-class ApiProcessor::Request {
+class Request {
 	std::function<void(std::shared_ptr<Request>)> cancelHandler;
 
 	uWS::HttpResponse * res;
@@ -95,8 +87,6 @@ private:
 };
 
 class ApiProcessor::TemplatedEndpointBuilder {
-	using Request = ApiProcessor::Request;
-
 	ApiProcessor& targetClass;
 
 	std::vector<std::string> varMarkers;
@@ -109,36 +99,32 @@ public:
 	TemplatedEndpointBuilder& path(std::string);
 	TemplatedEndpointBuilder& var();
 
-	template<typename... Args>
-	void end(std::function<void(std::shared_ptr<Request>, nlohmann::json, Args...)>);
+	template<typename Func>
+	void end(Func);
 
 	friend ApiProcessor;
 };
 
 class ApiProcessor::Endpoint {
-	using Request = ApiProcessor::Request;
 	AccessRules ar;
 
 public:
 	Endpoint(AccessRules);
 	virtual ~Endpoint();
 
-#pragma message("Endpoint::verify() should take User info as well, or have Request hold it")
 	virtual bool verify(const std::vector<std::string>&) = 0;
 	virtual void exec(std::shared_ptr<Request>, nlohmann::json, std::vector<std::string>) = 0;
 };
 
-template<typename... Args>
+template<typename Func, typename... Args>
 class ApiProcessor::TemplatedEndpoint : public ApiProcessor::Endpoint {
-	using Request = ApiProcessor::Request;
-
-	std::function<void(std::shared_ptr<Request>, nlohmann::json, Args...)> handler;
+	Func handler;
 
 	const std::vector<std::string> pathSections; // empty str = variable placeholder
 	std::array<u8, sizeof... (Args)> varPositions; // indexes of variables in path
 
 public:
-	TemplatedEndpoint(AccessRules, std::function<void(std::shared_ptr<Request>, nlohmann::json, Args...)>, std::vector<std::string>);
+	TemplatedEndpoint(AccessRules, Func, std::vector<std::string>);
 
 	bool verify(const std::vector<std::string>&);
 	void exec(std::shared_ptr<Request>, nlohmann::json, std::vector<std::string>);

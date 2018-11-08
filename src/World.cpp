@@ -5,6 +5,7 @@
 #include <config.hpp>
 #include <PacketDefinitions.hpp>
 
+#include <misc/ApiProcessor.hpp>
 #include <misc/TaskBuffer.hpp>
 
 #include <iostream>
@@ -239,9 +240,10 @@ Chunk& World::getChunk(Chunk::Pos x, Chunk::Pos y) {
 }
 
 // returns true if this function ended the request before returning
-bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse * res) {
+bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, std::shared_ptr<Request> req) {
 	if (!verifyChunkPos(x, y)) {
-		res->end();
+		req->writeStatus("400 Bad Request");
+		req->end();
 		return true;
 	}
 
@@ -250,7 +252,7 @@ bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse * res) {
 
 	if (!chunk.isPngCacheOutdated()) {
 		const auto& d = chunk.getPngData();
-		res->end(reinterpret_cast<const char *>(d.data()), d.size());
+		req->end(d.data(), d.size());
 		return true;
 	}
 
@@ -261,12 +263,17 @@ bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse * res) {
 
 		search = ongoingChunkRequests.emplace(std::piecewise_construct,
 			std::forward_as_tuple(k),
-			std::forward_as_tuple(std::initializer_list<uWS::HttpResponse *>{res})).first;
+			std::forward_as_tuple(std::initializer_list<std::shared_ptr<Request>>{std::move(req)})).first;
 
 		auto end = [this, search, &chunk] (TaskBuffer& tb) {
 			const auto& d = chunk.getPngData();
-			for (uWS::HttpResponse * res : search->second) {
-				res->end(reinterpret_cast<const char *>(d.data()), d.size());
+			for (auto& req : search->second) {
+				if (!req->isCancelled()) { // TODO: Prepared HTTP response?
+					//req->writeHeader("Content-Type", "image/png");
+					req->end(d.data(), d.size());
+				} else {
+					std::cout << "Didn't send, request was cancelled" << std::endl;
+				}
 			}
 
 			ongoingChunkRequests.erase(search);
@@ -281,20 +288,20 @@ bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse * res) {
 		});
 	} else {
 		// add this request to the list, if a png is already being encoded
-		search->second.emplace(res);
+		search->second.emplace_back(std::move(req));
 	}
 
 	return false;
 }
 
-void World::cancelChunkRequest(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse * res) {
+/*void World::cancelChunkRequest(Chunk::Pos x, Chunk::Pos y, uWS::HttpResponse * res) {
 	auto search = ongoingChunkRequests.find(key(x, y));
 	if (search != ongoingChunkRequests.end()) {
 		search->second.erase(res);
 		// can't erase the map entry, even if the set is empty
 		// because when the encoding finishes it will be accessed
 	}
-}
+}*/
 
 void World::chat(Player& p, const std::string& s) {
 	broadcast(ChatMessage(p.getUserInfo().uid, s));

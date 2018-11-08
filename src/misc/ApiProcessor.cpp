@@ -5,7 +5,6 @@
 
 #include <nlohmann/json.hpp>
 
-using Request = ApiProcessor::Request;
 using Endpoint = ApiProcessor::Endpoint;
 
 using TemplatedEndpointBuilder = ApiProcessor::TemplatedEndpointBuilder;
@@ -32,14 +31,29 @@ ApiProcessor::ApiProcessor(uWS::Hub& h) {
 			j = nlohmann::json::parse(data, data + len, nullptr, false);
 		}
 
-		exec(*rs, std::move(j), tokenize(req.getUrl().toString(), '/', true));
+		auto args(tokenize(req.getUrl().toString(), '/', true));
+
+		try {
+			urldecode(args);
+		} catch (const std::exception& e) {
+			(*rs)->writeStatus("400 Bad Request");
+			(*rs)->end({
+				{"reason", e.what()}
+			});
+
+			(*rs)->invalidateData();
+			return;
+		}
+
+		exec(*rs, std::move(j), std::move(args));
 		(*rs)->invalidateData();
 	});
 
 	h.onCancelledHttpRequest([] (uWS::HttpResponse * res) {
 		// requests only get cancelled when the requester disconnects, right?
 		if (auto * rs = static_cast<std::shared_ptr<Request> *>(res->getHttpSocket()->getUserData())) {
-			(*rs)->cancel(std::move(*rs));
+			Request& rref = **rs;
+			rref.cancel(std::move(*rs));
 			delete rs;
 			res->getHttpSocket()->setUserData(nullptr);
 		}
@@ -74,8 +88,16 @@ void ApiProcessor::exec(std::shared_ptr<Request> r, nlohmann::json j, std::vecto
 
 	for (auto& ep : definedEndpoints[m]) {
 		if (ep->verify(args)) {
-			ep->exec(std::move(r), std::move(j), std::move(args));
-			break;
+			Request& rref = *r.get();
+			try {
+				ep->exec(std::move(r), std::move(j), std::move(args));
+			} catch (const std::exception& e) {
+				rref.writeStatus("400 Bad Request");
+				rref.end({
+					{"reason", e.what()}
+				});
+			}
+			return;
 		}
 	}
 
@@ -85,7 +107,8 @@ void ApiProcessor::exec(std::shared_ptr<Request> r, nlohmann::json j, std::vecto
 
 
 Request::Request(uWS::HttpResponse * res, uWS::HttpRequest * req)
-: res(res),
+: cancelHandler(nullptr),
+  res(res),
   req(req) { }
 
 uWS::HttpResponse * Request::getResponse() {
@@ -105,6 +128,10 @@ void Request::writeStatus(std::string s) {
 }
 
 void Request::writeHeader(std::string key, std::string value) {
+	if (!res->hasHead) {
+		writeStatus("200 OK");
+	}
+
 	key.reserve(key.size() + value.size() + 8);
 	key.append(": ");
 	key.append(value);
@@ -151,20 +178,20 @@ void Request::onCancel(std::function<void(std::shared_ptr<Request>)> f) {
 void Request::cancel(std::shared_ptr<Request> r) {
 	// careful, this could be the last reference
 	if (cancelHandler) {
+		res = nullptr;
 		cancelHandler(std::move(r));
 	}
 }
 
 void Request::updateData(uWS::HttpResponse * res, uWS::HttpRequest * req) {
-	res = res;
-	req = req;
+	this->res = res;
+	this->req = req;
 	cancelHandler = nullptr;
 }
 
 void Request::invalidateData() {
 	req = nullptr;
 }
-
 
 
 
@@ -177,8 +204,6 @@ TemplatedEndpointBuilder& TemplatedEndpointBuilder::path(std::string s) {
 	if (s.size() == 0) {
 		throw std::runtime_error("Path sections can't be empty!");
 	}
-
-#pragma message("TODO: Check for non-URL characters?")
 
 	varMarkers.emplace_back(std::move(s));
 	return *this;

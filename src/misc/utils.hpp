@@ -17,6 +17,8 @@ void ltrim(std::string&);
 void trim(std::string&);
 const std::string& demangle(std::type_index);
 std::type_index strToType(const std::string& s);
+void urldecode(std::string&);
+void urldecode(std::vector<std::string>&);
 
 // interestingly enough this doesn't cause linker errors
 constexpr u8 popc(u32 n) {

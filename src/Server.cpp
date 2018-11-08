@@ -46,8 +46,10 @@ Server::Server(std::string basePath)
 	stopCaller->setData(this);
 	tb.setWorkerThreadSchedulingPriorityToLowestPossibleValueAllowedByTheOperatingSystem();
 
-	/*api.set("status", [this] (uWS::HttpResponse * res, auto& rs, auto args) {
-		std::string ip(res->getHttpSocket()->getAddress().address);
+	api.on(ApiProcessor::GET)
+		.path("status")
+	.end([this] (std::shared_ptr<Request> req, nlohmann::json) {
+		std::string ip(req->getResponse()->getHttpSocket()->getAddress().address);
 
 		bool banned = bm.isBanned(ip);
 
@@ -74,44 +76,34 @@ Server::Server(std::string basePath)
 			j["banInfo"] = bm.getInfoFor(ip);
 		}
 
-		std::string msg(j.dump());
-		res->end(msg.data(), msg.size());
-		return ApiProcessor::OK;
+		req->end(j);
 	});
 
-	api.set("view", [this] (uWS::HttpResponse * res, auto& rs, auto args) {
-		if (args.size() != 4 || !wm.verifyWorldName(args[1])) {
-			return ApiProcessor::INVALID_ARGS;
+	api.on(ApiProcessor::GET)
+		.path("view")
+		.var()
+		.var()
+		.var()
+	.end([this] (std::shared_ptr<Request> req, nlohmann::json j, std::string worldName, i32 x, i32 y) {
+		//std::cout << "[" << j << "]" << worldName << ","<< x << "," << y << std::endl;
+		if (!wm.verifyWorldName(worldName)) {
+			req->writeStatus("400 Bad Request");
+			req->end();
+			return;
 		}
 
-		if (!wm.isLoaded(args[1])) {
+		if (!wm.isLoaded(worldName)) {
 			// nginx is supposed to serve unloaded worlds and chunks.
-			res->end("\"This world is not loaded!\"", 27);
-			return ApiProcessor::OK;
+			req->writeStatus("404 Not Found");
+			req->end();
+			return;
 		}
 
-		World& world = wm.getOrLoadWorld(args[1]);
-
-		i32 x = 0;
-		i32 y = 0;
-
-		try {
-			x = std::stoi(args[2]);
-			y = std::stoi(args[3]);
-		} catch(...) { return ApiProcessor::INVALID_ARGS; }
+		World& world = wm.getOrLoadWorld(worldName);
 
 		// will encode the png in another thread if necessary and end the request when done
-		if (!world.sendChunk(x, y, res)) {
-			// didn't immediately send
-			rs.onCancel = [&world, x, y, res] {
-				// the world is guaranteed not to unload until all requests finish
-				// so this reference should be valid
-				world.cancelChunkRequest(x, y, res);
-			};
-		}
-
-		return ApiProcessor::OK;
-	});*/
+		world.sendChunk(x, y, std::move(req));
+	});
 
 	conn.addToBeg<ProxyChecker>(hcli, tc).setState(ProxyChecker::State::OFF);
 	conn.addToBeg<CaptchaChecker>(hcli).setState(CaptchaChecker::State::OFF);
@@ -133,7 +125,7 @@ Server::Server(std::string basePath)
 
 	//pr.set<>
 
-	h.getDefaultGroup<uWS::SERVER>().startAutoPing(15000);
+	h.getDefaultGroup<uWS::SERVER>().startAutoPing(30000);
 }
 
 bool Server::listenAndRun() {
