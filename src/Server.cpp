@@ -235,7 +235,6 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 		Client * const player = si->player;
 		if (si->captcha_verified == CA_WAITING && oc == uWS::TEXT && len > 7 && std::string(msg, 7) == "CaptchA" && len < 2048) {
 			std::string org_capt(msg + 7, len - 7);
-			NOTHING_SPECIAL_JUST_IGNORE_THIS_LINE_OF_TEXT_KTHX;
 
 			si->captcha_verified = CA_VERIFYING;
 			hcli.addRequest("https://www.google.com/recaptcha/api/siteverify", {
