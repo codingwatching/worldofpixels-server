@@ -1,1 +1,1 @@
-web: ./out 1337 oof oof
+web: ./out $PORT oof oof
