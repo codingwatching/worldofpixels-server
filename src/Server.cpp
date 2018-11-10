@@ -239,7 +239,7 @@ Server::Server(const u16 port, const std::string& modpw, const std::string& admi
 
 			si->captcha_verified = CA_VERIFYING;
 			hcli.addRequest("https://www.google.com/recaptcha/api/siteverify", {
-				{"secret", null},
+				{"secret", NOTHING_SPECIAL_JUST_IGNORE_THIS_LINE_OF_TEXT_KTHX},
 				{"remoteip", si->ip},
 				{"response", org_capt}
 			}, [this, ws] (AsyncHttp::Result res) {
