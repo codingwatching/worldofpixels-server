@@ -1,9 +1,12 @@
 #include "ApiProcessor.hpp"
+#pragma message("Make this class non-misc")
+#include <Session.hpp>
 
-#include <uWS.h>
 #include <misc/utils.hpp>
+#include <misc/base64.hpp>
 
 #include <nlohmann/json.hpp>
+#include <uWS.h>
 
 using Endpoint = ApiProcessor::Endpoint;
 
@@ -12,14 +15,15 @@ using TemplatedEndpointBuilder = ApiProcessor::TemplatedEndpointBuilder;
 template<typename... Args>
 using TemplatedEndpoint = ApiProcessor::TemplatedEndpoint<Args...>;
 
-ApiProcessor::ApiProcessor(uWS::Hub& h) {
+ApiProcessor::ApiProcessor(uWS::Hub& h, AuthManager& am)
+: am(am) {
 	// one connection can request multiple things before it closes
 	h.onHttpRequest([this] (uWS::HttpResponse * res, uWS::HttpRequest req, char * data, sz_t len, sz_t rem) {
-		std::shared_ptr<Request> * rs = static_cast<std::shared_ptr<Request> *>(res->getHttpSocket()->getUserData());
+		ll::shared_ptr<Request> * rs = static_cast<ll::shared_ptr<Request> *>(res->getHttpSocket()->getUserData());
 
 		if (!rs) {
-			auto reqtmp(std::make_shared<Request>(res, &req));
-			rs = new std::shared_ptr<Request>(std::move(reqtmp));
+			// we want to crash if this throws anyways, so no leak should be possible
+			rs = new ll::shared_ptr<Request>(new Request(res, &req));
 			res->getHttpSocket()->setUserData(rs);
 		} else {
 			(*rs)->updateData(res, &req);
@@ -51,7 +55,7 @@ ApiProcessor::ApiProcessor(uWS::Hub& h) {
 
 	h.onCancelledHttpRequest([] (uWS::HttpResponse * res) {
 		// requests only get cancelled when the requester disconnects, right?
-		if (auto * rs = static_cast<std::shared_ptr<Request> *>(res->getHttpSocket()->getUserData())) {
+		if (auto * rs = static_cast<ll::shared_ptr<Request> *>(res->getHttpSocket()->getUserData())) {
 			Request& rref = **rs;
 			rref.cancel(std::move(*rs));
 			delete rs;
@@ -63,7 +67,7 @@ ApiProcessor::ApiProcessor(uWS::Hub& h) {
 		// this library is retarded so the disconnection handler is called
 		// before the cancelled requests handler, so i need to do hacky things
 		// if i don't want to use freed memory (there's no request completion handler), cool!
-		std::shared_ptr<Request> * rs = static_cast<std::shared_ptr<Request> *>(s->getUserData());
+		ll::shared_ptr<Request> * rs = static_cast<ll::shared_ptr<Request> *>(s->getUserData());
 		if (!s->outstandingResponsesHead) {
 			// seems like no cancelled request handler will be called
 			delete rs; // note: deleting null is ok
@@ -79,19 +83,40 @@ void ApiProcessor::add(ApiProcessor::Method m, std::unique_ptr<Endpoint> ep) {
 	definedEndpoints[m].emplace_back(std::move(ep));
 }
 
-void ApiProcessor::exec(std::shared_ptr<Request> r, nlohmann::json j, std::vector<std::string> args) {
+void ApiProcessor::exec(ll::shared_ptr<Request> r, nlohmann::json j, std::vector<std::string> args) {
 	int m = r->getData()->getMethod(); // lol
 
 	if (m == ApiProcessor::Method::INVALID) {
+		r->writeStatus("400 Bad Request");
+		r->end();
 		return;
+	}
+
+	Session * sess = nullptr;
+
+	// maybe make this its own function
+	Header auth(r->getData()->getHeader("Authorization", 13));
+	if (auth) {
+		std::array<u8, 16> token;
+		int read = base64Decode(auth.value, auth.valueLength, token.data(), token.size());
+		if (read == token.size()) {
+			sess = am.getSession(token);
+		} else {
+			std::cout << "B64 decoder didn't read full token or error occurred: " << read << std::endl;
+		}
 	}
 
 	for (auto& ep : definedEndpoints[m]) {
 		if (ep->verify(args)) {
 			Request& rref = *r.get();
 			try {
-				ep->exec(std::move(r), std::move(j), std::move(args));
+				if (sess) {
+					ep->exec(std::move(r), std::move(j), *sess, std::move(args));
+				} else {
+					ep->exec(std::move(r), std::move(j), std::move(args));
+				}
 			} catch (const std::exception& e) {
+				// The request wasn't freed yet. (1 ref left in socket userdata)
 				rref.writeStatus("400 Bad Request");
 				rref.end({
 					{"reason", e.what()}
@@ -171,14 +196,14 @@ bool Request::isCancelled() const {
 	return res == nullptr;
 }
 
-void Request::onCancel(std::function<void(std::shared_ptr<Request>)> f) {
+void Request::onCancel(std::function<void(ll::shared_ptr<Request>)> f) {
 	cancelHandler = std::move(f);
 }
 
-void Request::cancel(std::shared_ptr<Request> r) {
+void Request::cancel(ll::shared_ptr<Request> r) {
 	// careful, this could be the last reference
+	res = nullptr;
 	if (cancelHandler) {
-		res = nullptr;
 		cancelHandler(std::move(r));
 	}
 }
@@ -218,3 +243,19 @@ Endpoint::Endpoint(ApiProcessor::AccessRules ar)
 : ar(ar) { }
 
 Endpoint::~Endpoint() { }
+
+ApiProcessor::AccessRules Endpoint::getRules() const {
+	return ar;
+}
+
+void Endpoint::exec(ll::shared_ptr<Request> req, nlohmann::json j, std::vector<std::string> arg) {
+	// If this method isn't implemented, then the other must be, right?
+	// This means that the request wasn't authenticated, or the token is invalid.
+	req->writeStatus("401 Unauthorized");
+	req->end();
+}
+
+void Endpoint::exec(ll::shared_ptr<Request> req, nlohmann::json j, Session&, std::vector<std::string> arg) {
+	// If this endpoint doesn't have the authorized overload implemented, call the other method
+	exec(std::move(req), std::move(j), std::move(arg));
+}

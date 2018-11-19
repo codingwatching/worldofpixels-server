@@ -13,7 +13,7 @@ PacketReader::PacketReader(uWS::Hub& h) {
 		}
 
 		auto search = handlers.find(OpCode(msg[0]));
-		if (oc == uWS::OpCode::TEXT || search == handlers.end()) {
+		if (oc != uWS::OpCode::BINARY || search == handlers.end()) {
 			ws->close(1003);
 			return;
 		}

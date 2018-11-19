@@ -1,7 +1,7 @@
 #include "World.hpp"
 
 #include <Client.hpp>
-#include <UserInfo.hpp>
+#include <User.hpp>
 #include <config.hpp>
 #include <PacketDefinitions.hpp>
 
@@ -240,7 +240,7 @@ Chunk& World::getChunk(Chunk::Pos x, Chunk::Pos y) {
 }
 
 // returns true if this function ended the request before returning
-bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, std::shared_ptr<Request> req) {
+bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request> req) {
 	if (!verifyChunkPos(x, y)) {
 		req->writeStatus("400 Bad Request");
 		req->end();
@@ -263,7 +263,7 @@ bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, std::shared_ptr<Request> req) 
 
 		search = ongoingChunkRequests.emplace(std::piecewise_construct,
 			std::forward_as_tuple(k),
-			std::forward_as_tuple(std::initializer_list<std::shared_ptr<Request>>{std::move(req)})).first;
+			std::forward_as_tuple(std::initializer_list<ll::shared_ptr<Request>>{std::move(req)})).first;
 
 		auto end = [this, search, &chunk] (TaskBuffer& tb) {
 			const auto& d = chunk.getPngData();
@@ -304,7 +304,7 @@ bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, std::shared_ptr<Request> req) 
 }*/
 
 void World::chat(Player& p, const std::string& s) {
-	broadcast(ChatMessage(p.getUserInfo().uid, s));
+	broadcast(ChatMessage(p.getUser().uid, s));
 }
 
 // returns false when you were not allowed to paint, or position is out of range

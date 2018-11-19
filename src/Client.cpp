@@ -3,16 +3,23 @@
 #include <uWS.h>
 
 #include <misc/utils.hpp>
-
-#include <World.hpp>
 #include <misc/PrepMsg.hpp>
 
-Client::Client(uWS::WebSocket<uWS::SERVER> * ws, World& w, Player::Builder& pb, UserInfo u, std::string ip)
+#include <World.hpp>
+#include <Session.hpp>
+
+Client::Client(uWS::WebSocket<uWS::SERVER> * ws, Session& s, Ipv4 ip, Player::Builder& pb)
 : ws(ws),
+  session(s),
   lastActionOn(jsDateNow()),
-  ui(std::move(u)),
-  ip(std::move(ip)),
-  pl(pb.setClient(*this)) { }
+  ip(ip),
+  pl(pb.setClient(*this)) {
+	session.addClient(*this);
+}
+
+Client::~Client() {
+	session.delClient(*this);
+}
 
 void Client::updateLastActionTime() {
 	lastActionOn = jsDateNow();
@@ -26,7 +33,7 @@ i64 Client::getLastActionTime() const {
 	return lastActionOn;
 }
 
-const std::string& Client::getIp() const {
+Ipv4 Client::getIp() const {
 	return ip;
 }
 
@@ -38,8 +45,12 @@ Player& Client::getPlayer() {
 	return pl;
 }
 
-UserInfo& Client::getUserInfo() {
-	return ui;
+Session& Client::getSession() {
+	return session;
+}
+
+User& Client::getUser() {
+	return session.getUser();
 }
 
 void Client::send(const PrepMsg& p) {

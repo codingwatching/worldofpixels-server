@@ -14,12 +14,14 @@
 #include <CaptchaChecker.hpp>
 #include <ProxyChecker.hpp>
 
+#include <misc/shared_ptr_ll.hpp>
 #include <misc/utils.hpp>
 
 #include <nlohmann/json.hpp>
 
 #include <iostream>
 #include <utility>
+#include <exception>
 
 constexpr auto asyncDeleter = [] (uS::Async * a) {
 	a->close();
@@ -46,9 +48,80 @@ Server::Server(std::string basePath)
 	stopCaller->setData(this);
 	tb.setWorkerThreadSchedulingPriorityToLowestPossibleValueAllowedByTheOperatingSystem();
 
+	registerEndpoints();
+	registerPackets();
+
+	conn.addToBeg<ProxyChecker>(hcli, tc).setState(ProxyChecker::State::OFF);
+	conn.addToBeg<CaptchaChecker>(hcli).setState(CaptchaChecker::State::OFF);
+	conn.addToBeg<WorldChecker>(wm);
+	conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>{
+		"http://ourworldofpixels.com",
+		"https://ourworldofpixels.com",
+		"https://jsconsole.com"
+	});
+	conn.addToBeg<BanChecker>(bm);
+	conn.addToBeg<ConnectionCounter>();
+
+	conn.onSocketChecked([this] (IncomingConnection& ic) -> Client * {
+		World& w = wm.getOrLoadWorld(ic.ci.world);
+		Player::Builder pb;
+		w.configurePlayerBuilder(pb);
+		return new Client(ic.ws, w, pb, std::move(ic.ci.ui), std::move(ic.ip));
+	});
+
+	h.getDefaultGroup<uWS::SERVER>().startAutoPing(30000);
+}
+
+bool Server::listenAndRun() {
+	std::string addr(s.getBindAddress());
+	u16 port = s.getBindPort();
+
+	const char * host = addr.size() > 0 ? addr.c_str() : nullptr;
+
+	if (!h.listen(host, port, nullptr, uS::ListenOptions::ONLY_IPV4)) {
+		unsafeStop();
+		std::cerr << "Couldn't listen on " << addr << ":" << port << "!" << std::endl;
+		return false;
+	}
+
+	std::cout << "Listening on " << addr << ":" << port << std::endl;
+
+	saveTimer = tc.startTimer([this] {
+		kickInactivePlayers();
+		if (wm.saveAll()) {
+			std::cout << "Worlds saved." << std::endl;
+		}
+		return true;
+	}, 900000);
+
+	stopCaller->start(Server::doStop);
+
+	try {
+		h.run();
+	} catch (const std::exception& e) {
+		std::cerr << "!!! Uncaught exception occurred! Stopping server." << std::endl;
+		std::cerr << "Type: " << demangle(typeid(e)) << std::endl;
+		std::cerr << "what(): " << e.what() << std::endl;
+		unsafeStop();
+		return false;
+	}
+
+	return true;
+}
+
+void Server::kickInactivePlayers() {
+	i64 now = jsDateNow();
+	conn.forEachClient([now] (Client& c) {
+		if (c.inactiveKickEnabled() && now - c.getLastActionTime() > 1200000) {
+			c.close();
+		}
+	});
+}
+
+void Server::registerEndpoints() {
 	api.on(ApiProcessor::GET)
 		.path("status")
-	.end([this] (std::shared_ptr<Request> req, nlohmann::json) {
+	.end([this] (ll::shared_ptr<Request> req, nlohmann::json) {
 		std::string ip(req->getResponse()->getHttpSocket()->getAddress().address);
 
 		bool banned = bm.isBanned(ip);
@@ -84,7 +157,7 @@ Server::Server(std::string basePath)
 		.var()
 		.var()
 		.var()
-	.end([this] (std::shared_ptr<Request> req, nlohmann::json j, std::string worldName, i32 x, i32 y) {
+	.end([this] (ll::shared_ptr<Request> req, nlohmann::json j, std::string worldName, i32 x, i32 y) {
 		//std::cout << "[" << j << "]" << worldName << ","<< x << "," << y << std::endl;
 		if (!wm.verifyWorldName(worldName)) {
 			req->writeStatus("400 Bad Request");
@@ -104,65 +177,10 @@ Server::Server(std::string basePath)
 		// will encode the png in another thread if necessary and end the request when done
 		world.sendChunk(x, y, std::move(req));
 	});
-
-	conn.addToBeg<ProxyChecker>(hcli, tc).setState(ProxyChecker::State::OFF);
-	conn.addToBeg<CaptchaChecker>(hcli).setState(CaptchaChecker::State::OFF);
-	conn.addToBeg<WorldChecker>(wm);
-	conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>{
-		"http://ourworldofpixels.com",
-		"https://ourworldofpixels.com",
-		"https://jsconsole.com"
-	});
-	conn.addToBeg<BanChecker>(bm);
-	conn.addToBeg<ConnectionCounter>();
-
-	conn.onSocketChecked([this] (IncomingConnection& ic) -> Client * {
-		World& w = wm.getOrLoadWorld(ic.ci.world);
-		Player::Builder pb;
-		w.configurePlayerBuilder(pb);
-		return new Client(ic.ws, w, pb, std::move(ic.ci.ui), std::move(ic.ip));
-	});
-
-	//pr.set<>
-
-	h.getDefaultGroup<uWS::SERVER>().startAutoPing(30000);
 }
 
-bool Server::listenAndRun() {
-	std::string addr(s.getBindAddress());
-	u16 port = s.getBindPort();
-
-	const char * host = addr.size() > 0 ? addr.c_str() : nullptr;
-
-	if (!h.listen(host, port, nullptr, uS::ListenOptions::ONLY_IPV4)) {
-		unsafeStop();
-		std::cerr << "Couldn't listen on " << addr << ":" << port << "!" << std::endl;
-		return false;
-	}
-
-	std::cout << "Listening on " << addr << ":" << port << std::endl;
-
-	saveTimer = tc.startTimer([this] {
-		kickInactivePlayers();
-		if (wm.saveAll()) {
-			std::cout << "Worlds saved." << std::endl;
-		}
-		return true;
-	}, 900000);
-
-	stopCaller->start(Server::doStop);
-
-	h.run();
-	return true;
-}
-
-void Server::kickInactivePlayers() {
-	i64 now = jsDateNow();
-	conn.forEachClient([now] (Client& c) {
-		if (c.inactiveKickEnabled() && now - c.getLastActionTime() > 1200000) {
-			c.close();
-		}
-	});
+void Server::registerPackets() {
+	//pr.on<>
 }
 
 void Server::unsafeStop() {

@@ -5,7 +5,7 @@ template<typename Func>
 struct TemplatedEndpointFactory : public TemplatedEndpointFactory<decltype(&Func::operator())> {};
 
 template<typename Func, typename ReturnType, typename... Args>
-struct TemplatedEndpointFactory<ReturnType(Func::*)(std::shared_ptr<Request>, nlohmann::json, Args...) const> {
+struct TemplatedEndpointFactory<ReturnType(Func::*)(ll::shared_ptr<Request>, nlohmann::json, Args...) const> {
 	static std::unique_ptr<ApiProcessor::Endpoint> make(ApiProcessor::AccessRules ar, Func f, std::vector<std::string> varMarkers) {
 		return std::make_unique<ApiProcessor::TemplatedEndpoint<Func, Args...>>(ar, std::move(f), std::move(varMarkers));
 	}
@@ -54,12 +54,12 @@ bool ApiProcessor::TemplatedEndpoint<Func, Args...>::verify(const std::vector<st
 }
 
 template<typename Func, typename... Args>
-void ApiProcessor::TemplatedEndpoint<Func, Args...>::exec(std::shared_ptr<Request> r, nlohmann::json j, std::vector<std::string> args) {
+void ApiProcessor::TemplatedEndpoint<Func, Args...>::exec(ll::shared_ptr<Request> r, nlohmann::json j, std::vector<std::string> args) {
 	execImpl(std::move(r), std::move(j), std::move(args), std::make_index_sequence<sizeof... (Args)>{});
 }
 
 template<typename Func, typename... Args>
 template<std::size_t... Is>
-void ApiProcessor::TemplatedEndpoint<Func, Args...>::execImpl(std::shared_ptr<Request> r, nlohmann::json j, std::vector<std::string> args, std::index_sequence<Is...>) {
+void ApiProcessor::TemplatedEndpoint<Func, Args...>::execImpl(ll::shared_ptr<Request> r, nlohmann::json j, std::vector<std::string> args, std::index_sequence<Is...>) {
 	handler(std::move(r), std::move(j), fromString<Args>(args[varPositions[Is]])...);
 }

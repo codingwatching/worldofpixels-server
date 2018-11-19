@@ -46,6 +46,8 @@ public:
 	void stop();
 
 private:
+	void registerEndpoints();
+	void registerPackets();
 	static void doStop(uS::Async *);
 	void unsafeStop();
 };

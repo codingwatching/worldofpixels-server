@@ -6,12 +6,16 @@
 #include <memory>
 #include <string>
 
+#include <AuthManager.hpp>
+
 #include <misc/explints.hpp>
 #include <misc/fwd_uWS.h>
+#include <misc/shared_ptr_ll.hpp>
 
 #include <nlohmann/json_fwd.hpp>
 
 class Request;
+class Session;
 
 class ApiProcessor {
 public:
@@ -22,11 +26,8 @@ public:
 	class TemplatedEndpoint;
 
 	enum AccessRules : u8 {
-		FOREIGN = 0b00001,
-		GUEST   = 0b00010,
-		USER    = 0b00100,
-		MOD     = 0b01000,
-		ADMIN   = 0b10000
+		FOREIGN    = 0b01,
+		AUTHORIZED = 0b10
 	};
 
 	enum Method {
@@ -43,21 +44,22 @@ public:
 	};
 
 private:
+	AuthManager& am;
 	/* one vector for each method, except invalid */
 	std::array<std::vector<std::unique_ptr<Endpoint>>, 9> definedEndpoints;
 
 public:
-	ApiProcessor(uWS::Hub&);
+	ApiProcessor(uWS::Hub&, AuthManager&);
 
-	TemplatedEndpointBuilder on(Method, AccessRules = AccessRules::USER);
+	TemplatedEndpointBuilder on(Method, AccessRules = AccessRules::AUTHORIZED);
 	void add(Method, std::unique_ptr<Endpoint>);
 
 private:
-	void exec(std::shared_ptr<Request>, nlohmann::json, std::vector<std::string>);
+	void exec(ll::shared_ptr<Request>, nlohmann::json, std::vector<std::string>);
 };
 
 class Request {
-	std::function<void(std::shared_ptr<Request>)> cancelHandler;
+	std::function<void(ll::shared_ptr<Request>)> cancelHandler;
 
 	uWS::HttpResponse * res;
 	uWS::HttpRequest * req;
@@ -75,11 +77,11 @@ public:
 	void end();
 
 	bool isCancelled() const;
-	void onCancel(std::function<void(std::shared_ptr<Request>)>);
+	void onCancel(std::function<void(ll::shared_ptr<Request>)>);
 
 private:
 	// arg will refer to this, moved from the current request map to avoid changing ref for the cancel handler
-	void cancel(std::shared_ptr<Request>);
+	void cancel(ll::shared_ptr<Request>);
 	void updateData(uWS::HttpResponse *, uWS::HttpRequest *);
 	void invalidateData();
 
@@ -112,8 +114,11 @@ public:
 	Endpoint(AccessRules);
 	virtual ~Endpoint();
 
+	AccessRules getRules() const;
+
 	virtual bool verify(const std::vector<std::string>&) = 0;
-	virtual void exec(std::shared_ptr<Request>, nlohmann::json, std::vector<std::string>) = 0;
+	virtual void exec(ll::shared_ptr<Request>, nlohmann::json, std::vector<std::string>);
+	virtual void exec(ll::shared_ptr<Request>, nlohmann::json, Session&, std::vector<std::string>);
 };
 
 template<typename Func, typename... Args>
@@ -127,11 +132,11 @@ public:
 	TemplatedEndpoint(AccessRules, Func, std::vector<std::string>);
 
 	bool verify(const std::vector<std::string>&);
-	void exec(std::shared_ptr<Request>, nlohmann::json, std::vector<std::string>);
+	void exec(ll::shared_ptr<Request>, nlohmann::json, std::vector<std::string>);
 
 private:
 	template<std::size_t... Is>
-	void execImpl(std::shared_ptr<Request>, nlohmann::json, std::vector<std::string>, std::index_sequence<Is...>);
+	void execImpl(ll::shared_ptr<Request>, nlohmann::json, std::vector<std::string>, std::index_sequence<Is...>);
 };
 
 #include "ApiProcessor.tpp"

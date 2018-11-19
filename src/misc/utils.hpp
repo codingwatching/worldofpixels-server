@@ -41,4 +41,3 @@ std::string n2hexstr(I w, sz_t hex_len = sizeof(I) << 1) {
 
 	return rc;
 }
-

@@ -8,6 +8,7 @@
 #include <misc/color.hpp>
 #include <misc/explints.hpp>
 #include <misc/IdSys.hpp>
+#include <misc/shared_ptr_ll.hpp>
 
 #include <string>
 #include <set>
@@ -38,7 +39,7 @@ private:
 
 	std::set<std::reference_wrapper<Player>> players;
 	std::unordered_map<u64, Chunk> chunks;
-	std::map<u64, std::vector<std::shared_ptr<Request>>> ongoingChunkRequests;
+	std::map<u64, std::vector<ll::shared_ptr<Request>>> ongoingChunkRequests;
 
 	std::vector<pixupd_t> pixelUpdates;
 	std::set<std::reference_wrapper<Player>> playerUpdates;
@@ -65,8 +66,8 @@ public:
 	static bool verifyChunkPos(Chunk::Pos x, Chunk::Pos y);
 	Chunk& getChunk(Chunk::Pos x, Chunk::Pos y);
 
-	bool sendChunk(Chunk::Pos x, Chunk::Pos y, std::shared_ptr<Request>);
-	//void cancelChunkRequest(Chunk::Pos x, Chunk::Pos y, std::shared_ptr<Request>);
+	bool sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request>);
+	//void cancelChunkRequest(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request>);
 
 	void setAreaProtection(Chunk::ProtPos x, Chunk::ProtPos y, bool state);
 

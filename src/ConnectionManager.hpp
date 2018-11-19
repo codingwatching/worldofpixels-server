@@ -10,7 +10,7 @@
 #include <misc/explints.hpp>
 #include <misc/fwd_uWS.h>
 
-#include <UserInfo.hpp>
+#include <User.hpp>
 
 class ConnectionProcessor;
 class IncomingConnection;
@@ -26,7 +26,7 @@ struct ClosedConnection {
 };
 
 struct ConnectionInfo {
-	UserInfo ui;
+	User ui;
 	std::string world;
 };
 

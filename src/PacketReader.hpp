@@ -16,7 +16,7 @@ public:
 	PacketReader(uWS::Hub&);
 
 	template<typename Packet, typename Func>
-	void set(Func);
+	void on(Func);
 };
 
 #include "PacketReader.tpp"

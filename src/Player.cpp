@@ -5,7 +5,7 @@
 
 #include <World.hpp>
 #include <Client.hpp>
-#include <UserInfo.hpp>
+#include <User.hpp>
 #include <PacketDefinitions.hpp>
 
 #include <nlohmann/json.hpp>
@@ -26,7 +26,7 @@ Player::Player(Client& c, World& w, u32 pid, World::Pos startX, World::Pos start
   pixelStep(0) {
 	// send player data to the client
 	world.playerJoined(*this);
-  	std::cout << "New player on world: " << world.getWorldName() << ", PID: " << playerId << ", UID: " << getUserInfo().uid << std::endl;
+	std::cout << "New player on world: " << world.getWorldName() << ", PID: " << playerId << ", UID: " << getUser().uid << std::endl;
 }
 
 Player::Player(const Player::Builder& pb)
@@ -54,12 +54,16 @@ Client& Player::getClient() const {
 	return cl;
 }
 
+Session& Player::getSession() const {
+	return cl.getSession();
+}
+
 World& Player::getWorld() const {
 	return world;
 }
 
-UserInfo& Player::getUserInfo() const {
-	return cl.getUserInfo();
+User& Player::getUser() const {
+	return cl.getUser();
 }
 
 World::Pos Player::getX() const {

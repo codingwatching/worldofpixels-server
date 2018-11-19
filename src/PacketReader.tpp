@@ -20,7 +20,7 @@ constexpr decltype(auto) sapply(F& f, Client& c, T&& t) {
 } // namespace prdetail
 
 template<typename Packet, typename Func>
-void PacketReader::set(Func f) {
+void PacketReader::on(Func f) {
 	handlers.emplace(Packet::code, [f{std::move(f)}] (Client& c, const u8 * data, sz_t size) {
 		prdetail::sapply(f, c, Packet::fromBuffer(data, size));
 	});

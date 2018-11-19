@@ -1,9 +1,6 @@
 #pragma once
 
 #include <string>
-#include <functional>
-
-#include <nlohmann/json_fwd.hpp>
 
 #include <misc/explints.hpp>
 #include <misc/color.hpp>
@@ -11,8 +8,9 @@
 
 class World; // using World::Pos = i32;
 using WorldPos = i32;
+class Session;
 class Client;
-class UserInfo;
+class User;
 class PrepMsg;
 
 class Player {
@@ -22,7 +20,7 @@ public:
 	using Step = u8; // Extra precision for X and Y
 	class Builder;
 
-private:
+private: // 65 b?
 	Client& cl;
 	World& world;
 	const Id playerId;
@@ -49,8 +47,9 @@ public:
 	bool canModifyWorld() const;
 
 	Client& getClient() const;
+	Session& getSession() const;
 	World& getWorld() const;
-	UserInfo& getUserInfo() const;
+	User& getUser() const;
 
 	void setPaintRate(u16 rate, u16 per);
 

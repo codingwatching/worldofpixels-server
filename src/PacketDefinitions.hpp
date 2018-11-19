@@ -1,7 +1,8 @@
 #pragma once
 
 #include <Packet.hpp>
-#include <UserInfo.hpp>
+#include <User.hpp>
+#include <Player.hpp>
 #include <World.hpp>
 
 namespace net {
@@ -40,12 +41,12 @@ using AuthProgress = Packet<net::tc::AUTH_PROGRESS, std::type_index>;
 using AuthOk       = Packet<net::tc::AUTH_OK,       std::string, u64, std::string, bool>;
 using AuthError    = Packet<net::tc::AUTH_ERROR,    std::type_index>;
 
-using PlayersShow = Packet<net::tc::SHOW_PLAYERS, std::vector<std::tuple<UserInfo::Id, net::Cursor>>>;
+using PlayersShow = Packet<net::tc::SHOW_PLAYERS, std::vector<std::tuple<User::Id, net::Cursor>>>;
 using PlayersHide = Packet<net::tc::HIDE_PLAYERS, std::vector<Player::Id>>;
 using ClientData  = Packet<net::tc::CLIENT_DATA,  net::Cursor>;
 
 using WorldUpdate      = Packet<net::tc::WORLD_UPDATE,   std::vector<net::Cursor>, std::vector<net::Pixel>>;
-using ChatMessage      = Packet<net::tc::CHAT_MESSAGE,   UserInfo::Id, std::string>;
+using ChatMessage      = Packet<net::tc::CHAT_MESSAGE,   User::Id, std::string>;
 using ProtectionUpdate = Packet<net::tc::PROTECTION_UPD, Chunk::ProtPos, Chunk::ProtPos, u32>;
 
 // Packet definitions, serverbound
