@@ -89,6 +89,18 @@ std::vector<std::string> tokenize(const std::string& str,
 	return tokens;
 }
 
+// std::random_device{}() returns a random number, used as seed for the
+// std::default_random_engine
+static std::default_random_engine rng(std::random_device{}());
+
+std::default_random_engine& getRandomEngine() {
+	return rng;
+}
+
+u8 randByte() {
+	return rng();
+}
+
 std::string randomStr(sz_t size) { // WARNING: RNG not thread safe
 	std::string str(size, '\0');
 
@@ -98,9 +110,6 @@ std::string randomStr(sz_t size) { // WARNING: RNG not thread safe
 			"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 			"abcdefghijklmnopqrstuvwxyz";
 
-		// std::random_device{}() returns a random number, used as seed for the
-		// std::default_random_engine
-		static std::default_random_engine rng(std::random_device{}());
 		static std::uniform_int_distribution<sz_t> get(0, sizeof(alphanum) - 2);
 
 		return alphanum[get(rng)];

@@ -22,14 +22,13 @@ static_assert((Chunk::pc & (Chunk::pc - 1)) == 0,
 	"size / protectionAreaSize must result in a power of 2");
 
 Chunk::Chunk(Pos x, Pos y, const WorldStorage& ws)
-: lastAction(jsDateNow()),
+: lastAction(std::chrono::steady_clock::now()),
   x(x),
   y(y),
   ws(ws),
-  canUnload(true),
+  canUnload(false), // DON'T unload before this is constructed (can happen by alloc fail)
   pngCacheOutdated(true),
-  pngFileOutdated(false),
-  moved(false) {
+  pngFileOutdated(false) {
 	bool readerCalled = false;
   	auto fail = [this] {
   		std::cerr << "Protection data corrupted for chunk "
@@ -73,28 +72,13 @@ Chunk::Chunk(Pos x, Pos y, const WorldStorage& ws)
 		data.allocate(Chunk::size, Chunk::size, ws.getBackgroundColor());
 		protectionData.fill(0);
 	}
-}
 
-Chunk::Chunk(Chunk&& c)
-: lastAction(c.lastAction),
-  x(c.x),
-  y(c.y),
-  ws(c.ws),
-  data(std::move(c.data)),
-  protectionData(std::move(c.protectionData)),
-  pngCache(std::move(c.pngCache)),
-  canUnload(c.canUnload),
-  pngCacheOutdated(c.pngCacheOutdated),
-  pngFileOutdated(c.pngFileOutdated) {
-  	// prevent the moved chunk from writing changes on destruction
-	c.moved = true;
+	preventUnloading(false);
 }
 
 Chunk::~Chunk() {
-	if (!moved) {
-		save();
-		unlockChunk();
-	}
+	save();
+	unlockChunk();
 }
 
 bool Chunk::setPixel(u16 x, u16 y, RGB_u clr) {
@@ -102,7 +86,7 @@ bool Chunk::setPixel(u16 x, u16 y, RGB_u clr) {
 	y &= Chunk::size - 1;
 
 	if (data.getPixel(x, y).rgb != clr.rgb) {
-		lastAction = jsDateNow();
+		updateLastActionTime();
 #warning "Fix possible concurrent access"
 		data.setPixel(x, y, clr); // XXX: possible concurrent access... must be looked at
 		pngFileOutdated = true;
@@ -113,7 +97,7 @@ bool Chunk::setPixel(u16 x, u16 y, RGB_u clr) {
 }
 
 void Chunk::setProtectionGid(ProtPos x, ProtPos y, u32 gid) {
-	//lastAction = jsDateNow();
+	//updateLastActionTime();
 	x &= Chunk::pc - 1;
 	y &= Chunk::pc - 1;
 
@@ -157,12 +141,16 @@ bool Chunk::save() {
 	return false;
 }
 
-i64 Chunk::getLastActionTime() const {
+void Chunk::updateLastActionTime() {
+	lastAction = std::chrono::steady_clock::now();
+}
+
+std::chrono::steady_clock::time_point Chunk::getLastActionTime() const {
 	return lastAction;
 }
 
 bool Chunk::shouldUnload(bool ignoreTime) const {
-	return canUnload && (ignoreTime || jsDateNow() - lastAction > 60000);
+	return canUnload && (ignoreTime || std::chrono::steady_clock::now() - lastAction > std::chrono::minutes(1));
 }
 
 void Chunk::preventUnloading(bool state) {

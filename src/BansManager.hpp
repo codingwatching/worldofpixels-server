@@ -3,6 +3,7 @@
 #include <string>
 #include <map>
 
+#include <misc/Ipv4.hpp>
 #include <misc/explints.hpp>
 
 #include <nlohmann/json_fwd.hpp>
@@ -17,7 +18,7 @@ void from_json(const nlohmann::json&, BanInfo&);
 
 class BansManager {
 	std::string bansFilePath;
-	std::map<std::string, BanInfo> bans;
+	std::map<Ipv4, BanInfo> bans;
 	bool bansChanged;
 
 public:
@@ -30,9 +31,9 @@ public:
 	void clearExpiredBans();
 	void resetBanlist();
 
-	bool isBanned(std::string);
-	const BanInfo& getInfoFor(std::string);
+	bool isBanned(Ipv4);
+	const BanInfo& getInfoFor(Ipv4);
 
-	void ban(std::string ip, u64 seconds, std::string reason = "");
-	bool unban(std::string ip);
+	void ban(Ipv4, u64 seconds, std::string reason = "");
+	bool unban(Ipv4);
 };

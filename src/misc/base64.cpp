@@ -9,7 +9,7 @@ constexpr auto bioDeleter = [] (BIO * b) {
 };
 
 int base64Decode(const char * encoded, sz_t encLength, u8 * out, sz_t outMaxLen) {
-	std::unique_ptr<BIO, bioDeleter> b64(BIO_new(BIO_f_base64()));
+	std::unique_ptr<BIO, decltype(bioDeleter)> b64(BIO_new(BIO_f_base64()), bioDeleter);
 	BIO_set_flags(b64.get(), BIO_FLAGS_BASE64_NO_NL);
 
 	BIO * source = BIO_new_mem_buf(encoded, encLength);

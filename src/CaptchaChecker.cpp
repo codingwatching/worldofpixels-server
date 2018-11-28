@@ -1,5 +1,7 @@
 #include "CaptchaChecker.hpp"
 
+#include <Session.hpp>
+#include <User.hpp>
 #include <ConnectionManager.hpp>
 #include <keys.hpp>
 
@@ -34,7 +36,7 @@ void CaptchaChecker::setState(State s) {
 }
 
 bool CaptchaChecker::isCaptchaEnabledFor(IncomingConnection& ic) {
-	return state == State::ALL || (ic.ci.ui.isGuest && state == State::GUESTS);
+	return state == State::ALL || (ic.session.getUser().isGuest() && state == State::GUESTS);
 }
 
 bool CaptchaChecker::isAsync(IncomingConnection& ic) {
@@ -57,7 +59,7 @@ bool CaptchaChecker::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
 void CaptchaChecker::asyncCheck(IncomingConnection& ic, std::function<void(bool)> cb) {
 	hcli.addRequest("https://www.google.com/recaptcha/api/siteverify", {
 		{"secret", CAPTCHA_API_KEY},
-		{"remoteip", ic.ip},
+		{"remoteip", ic.ip.toString()},
 		{"response", ic.args.at("captcha")}
 	}, [&ic, end{std::move(cb)}] (auto res) {
 		if (!res.successful) {

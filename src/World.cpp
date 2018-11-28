@@ -2,10 +2,11 @@
 
 #include <Client.hpp>
 #include <User.hpp>
+#pragma message("remove config.hpp")
 #include <config.hpp>
 #include <PacketDefinitions.hpp>
+#include <ApiProcessor.hpp>
 
-#include <misc/ApiProcessor.hpp>
 #include <misc/TaskBuffer.hpp>
 
 #include <iostream>
@@ -108,7 +109,7 @@ void World::playerUpdated(Player& pl) {
 
 void World::playerLeft(Player& pl) {
 	// XXX: a client could immediately join with the same pid
-	// solution: move player lefts at the beginning of the update array
+	// solution: move player lefts at the beginning of the network update packet
 	playersLeft.emplace(pl.getPid());
 	ids.freeId(pl.getPid());
 	players.erase(std::ref(pl));
@@ -248,11 +249,12 @@ bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request> req) {
 	}
 
 	// will load the chunk if unloaded... possible race with nginx if not
+	// TODO: Stream file from the server, instead of relying on nginx
 	Chunk& chunk = getChunk(x, y);
 
 	if (!chunk.isPngCacheOutdated()) {
 		const auto& d = chunk.getPngData();
-		req->end(d.data(), d.size());
+		req->end(reinterpret_cast<const char *>(d.data()), d.size());
 		return true;
 	}
 
@@ -270,7 +272,7 @@ bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request> req) {
 			for (auto& req : search->second) {
 				if (!req->isCancelled()) { // TODO: Prepared HTTP response?
 					//req->writeHeader("Content-Type", "image/png");
-					req->end(d.data(), d.size());
+					req->end(reinterpret_cast<const char *>(d.data()), d.size());
 				} else {
 					std::cout << "Didn't send, request was cancelled" << std::endl;
 				}
@@ -304,7 +306,7 @@ bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request> req) {
 }*/
 
 void World::chat(Player& p, const std::string& s) {
-	broadcast(ChatMessage(p.getUser().uid, s));
+	broadcast(ChatMessage(p.getUser().getId(), s));
 }
 
 // returns false when you were not allowed to paint, or position is out of range

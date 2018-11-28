@@ -5,7 +5,6 @@
 #include <WorldManager.hpp>
 #include <BansManager.hpp>
 #include <World.hpp>
-#include <keys.hpp>
 
 #include <ConnectionCounter.hpp>
 #include <BanChecker.hpp>
@@ -22,25 +21,27 @@
 #include <iostream>
 #include <utility>
 #include <exception>
+#include <new>
 
 constexpr auto asyncDeleter = [] (uS::Async * a) {
 	a->close();
 };
 
 Server::Server(std::string basePath)
-: startupTime(jsDateNow()),
+: startupTime(std::chrono::steady_clock::now()),
   h(uWS::NO_DELAY, true, 16384),
   stopCaller(new uS::Async(h.getLoop()), asyncDeleter),
   s(std::move(basePath)),
   bm(s.getBansManager()),
   tb(h.getLoop()), // XXX: this should get destructed before other users of the taskbuffer, like WorldManager. what do?
   tc(h.getLoop()),
+  am(tc),
+  api(h, am),
   hcli(h.getLoop()),
   wm(tb, tc, s),
   pr(h),
-  api(h),
   //cmd(*this),
-  conn(h, "OWOP"),
+  conn(h, am, "OWOP"),
   saveTimer(0) {
 	std::cout << "Admin password set to: " << s.getAdminPass() << "." << std::endl;
 	std::cout << "Moderator password set to: " << s.getModPass() << "." << std::endl;
@@ -66,7 +67,8 @@ Server::Server(std::string basePath)
 		World& w = wm.getOrLoadWorld(ic.ci.world);
 		Player::Builder pb;
 		w.configurePlayerBuilder(pb);
-		return new Client(ic.ws, w, pb, std::move(ic.ci.ui), std::move(ic.ip));
+
+		return new Client(ic.ws, ic.session, ic.ip, pb);
 	});
 
 	h.getDefaultGroup<uWS::SERVER>().startAutoPing(30000);
@@ -109,10 +111,22 @@ bool Server::listenAndRun() {
 	return true;
 }
 
+bool Server::freeMemory() {
+	if (wm.unloadOldChunks() == 0
+		&& wm.unloadOldChunks(true) == 0
+
+	) {
+		return false;
+	}
+
+	return true;
+}
+
 void Server::kickInactivePlayers() {
-	i64 now = jsDateNow();
+	auto now(std::chrono::steady_clock::now());
+
 	conn.forEachClient([now] (Client& c) {
-		if (c.inactiveKickEnabled() && now - c.getLastActionTime() > 1200000) {
+		if (c.inactiveKickEnabled() && now - c.getLastActionTime() > std::chrono::hours(1)) {
 			c.close();
 		}
 	});
@@ -122,14 +136,14 @@ void Server::registerEndpoints() {
 	api.on(ApiProcessor::GET)
 		.path("status")
 	.end([this] (ll::shared_ptr<Request> req, nlohmann::json) {
-		std::string ip(req->getResponse()->getHttpSocket()->getAddress().address);
+		Ipv4 ip(req->getResponse()->getHttpSocket()->getAddress().address);
 
 		bool banned = bm.isBanned(ip);
 
 		nlohmann::json j = {
-			{ "motd", "Now with Enterprise Quality™ code!" },
+			{ "motd", "Almost done!" },
 			{ "activeHttpHandles", hcli.activeHandles() },
-			{ "uptime", jsDateNow() - startupTime },
+			{ "uptime", std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - startupTime).count() }, // lol
 			{ "yourIp", ip },
 			{ "banned", banned }
 		};

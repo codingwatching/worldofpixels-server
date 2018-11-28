@@ -1,9 +1,9 @@
 #include "ApiProcessor.hpp"
-#pragma message("Make this class non-misc")
+
+#include <AuthManager.hpp>
 #include <Session.hpp>
 
 #include <misc/utils.hpp>
-#include <misc/base64.hpp>
 
 #include <nlohmann/json.hpp>
 #include <uWS.h>
@@ -92,19 +92,7 @@ void ApiProcessor::exec(ll::shared_ptr<Request> r, nlohmann::json j, std::vector
 		return;
 	}
 
-	Session * sess = nullptr;
-
-	// maybe make this its own function
-	Header auth(r->getData()->getHeader("Authorization", 13));
-	if (auth) {
-		std::array<u8, 16> token;
-		int read = base64Decode(auth.value, auth.valueLength, token.data(), token.size());
-		if (read == token.size()) {
-			sess = am.getSession(token);
-		} else {
-			std::cout << "B64 decoder didn't read full token or error occurred: " << read << std::endl;
-		}
-	}
+	Session * sess = getSession(*r.get());
 
 	for (auto& ep : definedEndpoints[m]) {
 		if (ep->verify(args)) {
@@ -127,8 +115,27 @@ void ApiProcessor::exec(ll::shared_ptr<Request> r, nlohmann::json j, std::vector
 	}
 
 	r->writeStatus("501 Not Implemented");
+	//r->writeStatus("404 Not Found");
 	r->end();
 }
+
+Session * ApiProcessor::getSession(Request& r) {
+	uWS::HttpRequest& req = *r.getData();
+	if (uWS::Header auth = req.getHeader("Authorization", 13)) {
+		std::string b64tok(auth.toString()); // change to string_view
+		sz_t i = b64tok.find("owop ");
+		if (i == std::string::npos) {
+			return nullptr;
+		}
+
+		i += 5;
+
+		return am.getSession(b64tok.c_str() + i, b64tok.size() - i);
+	}
+
+	return nullptr;
+}
+
 
 
 Request::Request(uWS::HttpResponse * res, uWS::HttpRequest * req)
@@ -145,51 +152,47 @@ uWS::HttpRequest * Request::getData() {
 }
 
 void Request::writeStatus(std::string s) {
-	s.reserve(s.size() + 12);
-	s.insert(0, "HTTP/1.1 ");
-	s.append("\r\n");
+	writeStatus(s.data(), s.size());
+}
 
-	res->write(s.data(), s.size());
+void Request::writeStatus(const char * b, sz_t s) {
+	write("HTTP/1.1 ", 9);
+	write(b, s);
+	write("\r\n", 2);
 }
 
 void Request::writeHeader(std::string key, std::string value) {
-	if (!res->hasHead) {
-		writeStatus("200 OK");
-	}
-
-	key.reserve(key.size() + value.size() + 8);
-	key.append(": ");
-	key.append(value);
-	key.append("\r\n");
-
-	res->write(key.data(), key.size());
+	write(key.data(), key.size());
+	write(": ", 2);
+	write(value.data(), value.size());
+	write("\r\n", 2);
 }
 
-void Request::end(const u8 * buf, sz_t size) {
-	if (res->hasHead) {
+void Request::end(const char * buf, sz_t size) {
+	if (bufferedData.size()) {
 		writeHeader("Content-Length", std::to_string(size));
-		res->write("\r\n", 2);
+		write("\r\n", 2);
 	}
 
-	res->end(reinterpret_cast<const char *>(buf), size);
+	writeAndEnd(buf, size);
 }
 
 void Request::end(nlohmann::json j) {
 	std::string s(j.dump());
-	if (!res->hasHead) {
-		writeStatus("200 OK");
+	if (!bufferedData.size()) {
+		writeStatus("200 OK", 6);
 	}
 
 	writeHeader("Content-Type", "application/json");
-	end(reinterpret_cast<const u8 *>(s.data()), s.size());
+	end(s.data(), s.size());
 }
 
 void Request::end() {
-	if (res->hasHead) {
-		res->write("Content-Length: 0\r\n\r\n", 21);
+	if (!bufferedData.size()) {
+		res->end();
+	} else {
+		writeAndEnd("Content-Length: 0\r\n\r\n", 21);
 	}
-
-	res->end();
 }
 
 bool Request::isCancelled() const {
@@ -198,6 +201,20 @@ bool Request::isCancelled() const {
 
 void Request::onCancel(std::function<void(ll::shared_ptr<Request>)> f) {
 	cancelHandler = std::move(f);
+}
+
+void Request::write(const char * b, sz_t s) {
+	bufferedData.append(b, s);
+}
+
+void Request::writeAndEnd(const char * b, sz_t s) {
+	if (!bufferedData.size()) {
+		res->end(b, s);
+	} else {
+		res->hasHead = true;
+		bufferedData.append(b, s);
+		res->end(bufferedData.data(), bufferedData.size());
+	}
 }
 
 void Request::cancel(ll::shared_ptr<Request> r) {
@@ -212,6 +229,7 @@ void Request::updateData(uWS::HttpResponse * res, uWS::HttpRequest * req) {
 	this->res = res;
 	this->req = req;
 	cancelHandler = nullptr;
+	bufferedData.clear();
 }
 
 void Request::invalidateData() {

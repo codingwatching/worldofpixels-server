@@ -4,6 +4,8 @@
 
 #include <map>
 #include <string>
+
+#include <misc/Ipv4.hpp>
 #include <misc/explints.hpp>
 
 class ConnectionCounter : public ConnectionProcessor {
@@ -14,7 +16,7 @@ class ConnectionCounter : public ConnectionProcessor {
 	u32 currentActive;
 
 	u8 maxConnsPerIp;
-	std::map<std::string, u8> connCountPerIp;
+	std::map<Ipv4, u8> connCountPerIp;
 
 public:
 	ConnectionCounter();

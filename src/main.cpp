@@ -1,14 +1,23 @@
 #include <iostream>
 #include <memory>
+#include <new>
 
 #include <Server.hpp>
-#include <misc/PropertyReader.hpp>
 
 /* Just for the signal handler */
 std::unique_ptr<Server> s;
 
 void stopServer() {
 	s->stop();
+}
+
+void outOfMemoryHandler() {
+	std::cerr << "Out of mem! Trying to free some." << std::endl;
+	
+	if (!s->freeMemory()) {
+		std::cerr << "Couldn't free any memory :(" << std::endl;
+		throw std::bad_alloc();
+	}
 }
 
 #ifdef _WIN32
@@ -46,6 +55,8 @@ bool installSignalHandler() {
 
 int main(int argc, char * argv[]) {
 	std::cout << "Starting server..." << std::endl;
+
+	std::set_new_handler(outOfMemoryHandler);
 
 	if (!installSignalHandler()) {
 		std::cerr << "Failed to install signal handler" << std::endl;

@@ -69,10 +69,10 @@ bool WorldManager::saveAll() {
 	return didStuff;
 }
 
-sz_t WorldManager::unloadOldChunks() {
+sz_t WorldManager::unloadOldChunks(bool all) {
 	sz_t totalUnloaded = 0;
 	for (auto& w : worlds) {
-		totalUnloaded += w.second.unloadOldChunks();
+		totalUnloaded += w.second.unloadOldChunks(all);
 	}
 
 	return totalUnloaded;

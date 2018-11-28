@@ -30,7 +30,7 @@ public:
 	sz_t loadedWorlds() const;
 	bool saveAll();
 
-	sz_t unloadOldChunks();
+	sz_t unloadOldChunks(bool all = false);
 
 private:
 	void tickWorlds();

@@ -2,9 +2,11 @@
 
 #include "ConnectionProcessor.hpp"
 
+#include <chrono>
 #include <map>
 
 #include <misc/explints.hpp>
+#include <misc/Ipv4.hpp>
 
 class AsyncHttp;
 class TimedCallbacks;
@@ -18,7 +20,7 @@ private:
 
 	AsyncHttp& hcli;
 	State state;
-	std::map<std::string, Info> cache;
+	std::map<Ipv4, Info> cache;
 
 public:
 	ProxyChecker(AsyncHttp&, TimedCallbacks&);
@@ -37,5 +39,5 @@ public:
 
 struct ProxyChecker::Info {
 	bool isProxy;
-	i64 checkTime;
+	std::chrono::steady_clock::time_point checkTime;
 };

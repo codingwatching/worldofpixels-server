@@ -1,5 +1,6 @@
 #pragma once
 
+#include <random>
 #include <string>
 #include <vector>
 #include <typeindex>
@@ -11,6 +12,8 @@ bool makeDir(const std::string&);
 bool fileExists(const std::string&);
 i64 jsDateNow();
 std::vector<std::string> tokenize(const std::string&, char delimiter = ' ', bool trimEmpty = false);
+std::default_random_engine& getDefaultEngine();
+u8 randByte();
 std::string randomStr(sz_t size);
 void rtrim(std::string&);
 void ltrim(std::string&);

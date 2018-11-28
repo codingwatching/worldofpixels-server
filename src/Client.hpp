@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+
 #include <misc/fwd_uWS.h>
 #include <misc/explints.hpp>
 #include <misc/Ipv4.hpp>
@@ -13,7 +15,7 @@ class User;
 class Client { // 95 b
 	uWS::WebSocket<true> * const ws;
 	Session& session;
-	i64 lastActionOn;
+	std::chrono::steady_clock::time_point lastAction;
 	Ipv4 ip;
 	Player pl;
 
@@ -24,7 +26,7 @@ public:
 	void updateLastActionTime();
 
 	bool inactiveKickEnabled() const;
-	i64 getLastActionTime() const;
+	std::chrono::steady_clock::time_point getLastActionTime() const;
 	Ipv4 getIp() const;
 	uWS::WebSocket<true> * getWs();
 	Session& getSession();

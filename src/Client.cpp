@@ -11,7 +11,7 @@
 Client::Client(uWS::WebSocket<uWS::SERVER> * ws, Session& s, Ipv4 ip, Player::Builder& pb)
 : ws(ws),
   session(s),
-  lastActionOn(jsDateNow()),
+  lastAction(std::chrono::steady_clock::now()),
   ip(ip),
   pl(pb.setClient(*this)) {
 	session.addClient(*this);
@@ -22,15 +22,15 @@ Client::~Client() {
 }
 
 void Client::updateLastActionTime() {
-	lastActionOn = jsDateNow();
+	lastAction = std::chrono::steady_clock::now();
 }
 
 bool Client::inactiveKickEnabled() const {
 	return true;
 }
 
-i64 Client::getLastActionTime() const {
-	return lastActionOn;
+std::chrono::steady_clock::time_point Client::getLastActionTime() const {
+	return lastAction;
 }
 
 Ipv4 Client::getIp() const {
@@ -62,5 +62,6 @@ void Client::close() {
 }
 
 bool Client::operator ==(const Client& c) const {
-	return ws == c.ws;
+	// Client objects are NOT meant to be copied
+	return this == std::addressof(c);
 }

@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 #include <mutex>
+#include <chrono>
 #include <shared_mutex>
 #include <bitset>
 
@@ -30,7 +31,7 @@ public:
 
 private:
 	mutable std::shared_timed_mutex sm;
-	i64 lastAction;
+	std::chrono::steady_clock::time_point lastAction;
 	const Pos x;
 	const Pos y;
 	const WorldStorage& ws;
@@ -41,11 +42,9 @@ private:
 	bool canUnload;
 	bool pngCacheOutdated;
 	bool pngFileOutdated;
-	bool moved;
 
 public:
 	Chunk(Pos x, Pos y, const WorldStorage& ws);
-	Chunk(Chunk&&);
 	~Chunk();
 
 	bool setPixel(u16 x, u16 y, RGB_u);
@@ -60,7 +59,9 @@ public:
 
 	bool save();
 
-	i64 getLastActionTime() const;
+	void updateLastActionTime();
+	std::chrono::steady_clock::time_point getLastActionTime() const;
+	
 	bool shouldUnload(bool) const;
 	void preventUnloading(bool);
 

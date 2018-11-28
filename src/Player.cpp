@@ -26,7 +26,7 @@ Player::Player(Client& c, World& w, u32 pid, World::Pos startX, World::Pos start
   pixelStep(0) {
 	// send player data to the client
 	world.playerJoined(*this);
-	std::cout << "New player on world: " << world.getWorldName() << ", PID: " << playerId << ", UID: " << getUser().uid << std::endl;
+	std::cout << "New player on world: " << world.getWorldName() << ", PID: " << playerId << ", UID: " << getUser().getId() << std::endl;
 }
 
 Player::Player(const Player::Builder& pb)

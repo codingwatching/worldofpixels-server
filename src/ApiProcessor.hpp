@@ -56,10 +56,12 @@ public:
 
 private:
 	void exec(ll::shared_ptr<Request>, nlohmann::json, std::vector<std::string>);
+	Session * getSession(Request&);
 };
 
 class Request {
 	std::function<void(ll::shared_ptr<Request>)> cancelHandler;
+	std::string bufferedData;
 
 	uWS::HttpResponse * res;
 	uWS::HttpRequest * req;
@@ -71,8 +73,9 @@ public:
 	uWS::HttpRequest * getData();
 
 	void writeStatus(std::string);
+	void writeStatus(const char *, sz_t);
 	void writeHeader(std::string key, std::string val);
-	void end(const u8 *, sz_t);
+	void end(const char *, sz_t);
 	void end(nlohmann::json);
 	void end();
 
@@ -80,7 +83,9 @@ public:
 	void onCancel(std::function<void(ll::shared_ptr<Request>)>);
 
 private:
-	// arg will refer to this, moved from the current request map to avoid changing ref for the cancel handler
+	void write(const char *, sz_t);
+	void writeAndEnd(const char *, sz_t);
+
 	void cancel(ll::shared_ptr<Request>);
 	void updateData(uWS::HttpResponse *, uWS::HttpRequest *);
 	void invalidateData();

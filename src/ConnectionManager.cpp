@@ -1,12 +1,14 @@
 #include "ConnectionManager.hpp"
 
-#include <uWS.h>
-
-#include <misc/utils.hpp>
-
 #include <Client.hpp>
 #include <ConnectionProcessor.hpp>
 #include <PacketDefinitions.hpp>
+#include <AuthManager.hpp>
+#include <Session.hpp>
+
+#include <misc/utils.hpp>
+
+#include <uWS.h>
 
 ClosedConnection::ClosedConnection(Client& c)
 : ws(c.getWs()),
@@ -15,11 +17,12 @@ ClosedConnection::ClosedConnection(Client& c)
 
 ClosedConnection::ClosedConnection(IncomingConnection& ic)
 : ws(ic.ws),
-  ip(std::move(ic.ip)),
+  ip(ic.ip),
   wasClient(false) { }
 
-ConnectionManager::ConnectionManager(uWS::Hub& h, std::string protoName)
-: defaultGroup(h.getDefaultGroup<uWS::SERVER>()) {
+ConnectionManager::ConnectionManager(uWS::Hub& h, AuthManager& a, std::string protoName)
+: defaultGroup(h.getDefaultGroup<uWS::SERVER>()),
+  am(a) {
 	h.onConnection([this, pn{std::move(protoName)}] (uWS::WebSocket<uWS::SERVER> * ws, uWS::HttpRequest req) {
 		// Maybe this could be moved on the upgrade handler, somehow
 		uWS::Header argHead(req.getHeader("sec-websocket-protocol", 22));
@@ -45,7 +48,17 @@ ConnectionManager::ConnectionManager(uWS::Hub& h, std::string protoName)
 		}
 
 		auto addr = ws->getAddress();
-		handleIncoming(ws, std::move(argList), req, addr.address);
+		auto search = argList.find("token");
+		if (search == argList.end()) {
+			ws->close(4000);
+			return;
+		}
+
+		if (Session * sess = am.getSession(search->second)) {
+			handleIncoming(ws, *sess, std::move(argList), req, addr.address);
+		} else {
+			ws->close(4001);
+		}
 	});
 
 	h.onDisconnection([this] (uWS::WebSocket<uWS::SERVER> * ws, int c, const char * msg, sz_t len) {
@@ -55,6 +68,7 @@ ConnectionManager::ConnectionManager(uWS::Hub& h, std::string protoName)
 			auto ic = std::find_if(pending.begin(), pending.end(), [ws] (const IncomingConnection& ic) {
 				return ic.ws == ws;
 			});
+
 			if (ic != pending.end()) {
 				// will get deleted once the current async processor finishes
 				ic->cancelled = true;
@@ -85,10 +99,10 @@ void ConnectionManager::forEachProcessor(std::function<void(ConnectionProcessor&
 	}
 }
 
-void ConnectionManager::handleIncoming(uWS::WebSocket<uWS::SERVER> * ws,
-		std::map<std::string, std::string> args, uWS::HttpRequest req, std::string ip) {
+void ConnectionManager::handleIncoming(uWS::WebSocket<uWS::SERVER> * ws, Session& session,
+		std::map<std::string, std::string> args, uWS::HttpRequest req, Ipv4 ip) {
 	// can be optimized
-	pending.push_front({ConnectionInfo(), ws, std::move(args), processors.begin(), pending.end(), std::move(ip), false});
+	pending.push_front({ConnectionInfo(), session,  ws, std::move(args), processors.begin(), pending.end(), ip, false});
 	auto ic = pending.begin();
 	ic->it = ic;
 
@@ -149,7 +163,8 @@ void ConnectionManager::handleEnd(IncomingConnection& ic) {
 		}
 	}
 
-	AuthOk::one(ic.ws, ic.ci.world, ic.ci.ui.uid, ic.ci.ui.username, ic.ci.ui.isGuest);
+	User& u = ic.session.getUser();
+	AuthOk::one(ic.ws, ic.ci.world, u.getId(), u.getUsername(), u.isGuest());
 
 	Client * cl = clientTransformer(ic);
 	ic.ws->setUserData(cl);

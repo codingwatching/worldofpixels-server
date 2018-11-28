@@ -1,6 +1,7 @@
 #include "ProxyChecker.hpp"
 
 #include <ConnectionManager.hpp>
+#include <Session.hpp>
 #include <keys.hpp>
 
 #include <misc/AsyncHttp.hpp>
@@ -33,9 +34,12 @@ ProxyChecker::ProxyChecker(AsyncHttp& hcli, TimedCallbacks& tc)
 : hcli(hcli),
   state(State::GUESTS) {
 	tc.startTimer([this] {
-		i64 now = jsDateNow();
+		auto now(std::chrono::steady_clock::now());
+
 		for (auto it = cache.begin(); it != cache.end();) {
-			if (now - it->second.checkTime > 6 * 60 * 60 * 1000) {
+			std::chrono::hours expiryInterval(it->second.isProxy ? 12 : 24);
+
+			if (now - it->second.checkTime > expiryInterval) {
 				it = cache.erase(it);
 			} else {
 				++it;
@@ -52,7 +56,7 @@ void ProxyChecker::setState(State s) {
 
 bool ProxyChecker::isCheckNeededFor(IncomingConnection& ic) {
 	bool inCache = cache.find(ic.ip) != cache.end();
-	return !inCache && (state == State::ALL || (ic.ci.ui.isGuest && state == State::GUESTS));
+	return !inCache && (state == State::ALL || (ic.session.getUser().isGuest() && state == State::GUESTS));
 }
 
 bool ProxyChecker::isAsync(IncomingConnection& ic) {
@@ -65,15 +69,16 @@ bool ProxyChecker::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
 }
 
 void ProxyChecker::asyncCheck(IncomingConnection& ic, std::function<void(bool)> cb) {
-	hcli.addRequest("http://proxycheck.io/v2/" + ic.ip, {
+	hcli.addRequest("http://proxycheck.io/v2/" + ic.ip.toString(), {
 		{"key", PROXY_API_KEY},
 	}, [this, &ic, end{std::move(cb)}] (auto res) {
 		if (!res.successful) {
 			std::cerr << "Error when checking for proxy: " << res.errorString << ", " << res.data << std::endl;
-			end(!ic.ci.ui.isGuest);
+			end(!ic.session.getUser().isGuest());
 			return;
 		}
 
+		std::string ip(ic.ip.toString());
 		bool verified = false;
 		bool isProxy = false;
 		try {
@@ -83,9 +88,9 @@ void ProxyChecker::asyncCheck(IncomingConnection& ic, std::function<void(bool)> 
 				std::cout << "Message from proxycheck.io: " << j["message"].get<std::string>() << std::endl;
 			}
 
-			if (j[ic.ip].is_object()) {
+			if (j[ip].is_object()) {
 				verified = true;
-				isProxy = j[ic.ip]["proxy"].get<std::string>() == "yes";
+				isProxy = j[ip]["proxy"].get<std::string>() == "yes";
 			}
 		} catch (const std::exception& e) {
 			std::cerr << "Exception when parsing json by proxycheck.io! (" << res.data << ")" << std::endl;
@@ -93,10 +98,10 @@ void ProxyChecker::asyncCheck(IncomingConnection& ic, std::function<void(bool)> 
 		}
 
 		if (verified) {
-			cache.emplace(ic.ip, ProxyChecker::Info{isProxy, jsDateNow()});
+			cache.emplace(ic.ip, ProxyChecker::Info{isProxy, std::chrono::steady_clock::now()});
 		}
 
-		end(verified ? !isProxy : !ic.ci.ui.isGuest);
+		end(verified ? !isProxy : !ic.session.getUser().isGuest());
 	});
 }
 

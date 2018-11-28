@@ -9,16 +9,18 @@
 
 #include <misc/explints.hpp>
 #include <misc/fwd_uWS.h>
+#include <misc/Ipv4.hpp>
 
 #include <User.hpp>
 
 class ConnectionProcessor;
 class IncomingConnection;
 class Client;
+class AuthManager;
 
 struct ClosedConnection {
 	uWS::WebSocket<true> * const ws;
-	const std::string ip;
+	const Ipv4 ip;
 	const bool wasClient;
 
 	ClosedConnection(Client&);
@@ -26,29 +28,31 @@ struct ClosedConnection {
 };
 
 struct ConnectionInfo {
-	User ui;
 	std::string world;
 };
 
 struct IncomingConnection {
 	ConnectionInfo ci;
+	Session& session;
 	uWS::WebSocket<true> * ws;
 	std::map<std::string, std::string> args;
 	std::forward_list<std::unique_ptr<ConnectionProcessor>>::iterator nextProcessor;
 	std::list<IncomingConnection>::iterator it; // own position in list
-	std::string ip;
+	Ipv4 ip;
 	bool cancelled;
 };
 
 class ConnectionManager {
 	uWS::Group<true>& defaultGroup;
+	AuthManager& am;
+
 	std::forward_list<std::unique_ptr<ConnectionProcessor>> processors;
 	std::list<IncomingConnection> pending;
 	std::map<std::type_index, std::reference_wrapper<ConnectionProcessor>> processorTypeMap;
 	std::function<Client*(IncomingConnection&)> clientTransformer;
 
 public:
-	ConnectionManager(uWS::Hub&, std::string protoName);
+	ConnectionManager(uWS::Hub&, AuthManager&, std::string protoName);
 
 	void onSocketChecked(std::function<Client*(IncomingConnection&)>);
 
@@ -62,7 +66,7 @@ public:
 	void forEachClient(std::function<void(Client&)>);
 
 private:
-	void handleIncoming(uWS::WebSocket<true> *, std::map<std::string, std::string>, uWS::HttpRequest, std::string ip);
+	void handleIncoming(uWS::WebSocket<true> *, Session&, std::map<std::string, std::string>, uWS::HttpRequest, Ipv4);
 	void handleAsync(IncomingConnection&);
 	void handleFail(IncomingConnection&);
 	void handleEnd(IncomingConnection&);

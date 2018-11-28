@@ -1,19 +1,49 @@
-#include <User.hpp>
+#include "User.hpp"
+
+#include <algorithm>
+#include <memory>
+
+#include <Session.hpp>
 
 #include <nlohmann/json.hpp>
 
-User::User()
-: uid(1),
+User::User(User::Id uid)
+: uid(uid),
   username("Guest"),
-  isGuest(true) { }
+  guest(true) { }
 
-User::User(u64 uid, std::string s)
+User::User(User::Id uid, std::string s)
 : uid(uid),
   username(std::move(s)),
-  isGuest(false) { }
+  guest(false) { }
 
-void to_json(nlohmann::json& j, const User& ui) {
-	j["uid"] = ui.uid;
-	j["username"] = ui.username;
-	j["guest"] = ui.isGuest;
+User::Id User::getId() const {
+	return uid;
+}
+
+const std::string& User::getUsername() const {
+	return username;
+}
+
+bool User::isGuest() const {
+	return guest;
+}
+
+void User::addSession(Session& s) {
+	linkedSessions.emplace_back(std::ref(s));
+}
+
+void User::delSession(Session& s) {
+	auto it = std::find_if(linkedSessions.begin(), linkedSessions.end(),
+		[&s] (const auto& sr) { return std::addressof(sr.get()) == std::addressof(s); });
+
+	if (it != linkedSessions.end()) {
+		linkedSessions.erase(it);
+	}
+}
+
+void to_json(nlohmann::json& j, const User& u) {
+	j["uid"] = u.getId();
+	j["username"] = u.getUsername();
+	j["guest"] = u.isGuest();
 }
