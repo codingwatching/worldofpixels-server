@@ -5,6 +5,8 @@
 #include <User.hpp>
 #include <Client.hpp>
 
+#pragma message("TODO: Think if HTTP requests need to prevent session expires")
+
 Session::Session(ll::shared_ptr<User> usr, Ipv4 ip, std::string ua, std::string lang, std::chrono::minutes maxInactivity)
 : user(std::move(usr)),
   maxInactivity(std::move(maxInactivity)),

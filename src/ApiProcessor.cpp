@@ -12,9 +12,6 @@ using Endpoint = ApiProcessor::Endpoint;
 
 using TemplatedEndpointBuilder = ApiProcessor::TemplatedEndpointBuilder;
 
-template<typename... Args>
-using TemplatedEndpoint = ApiProcessor::TemplatedEndpoint<Args...>;
-
 ApiProcessor::ApiProcessor(uWS::Hub& h, AuthManager& am)
 : am(am) {
 	// one connection can request multiple things before it closes
@@ -75,8 +72,8 @@ ApiProcessor::ApiProcessor(uWS::Hub& h, AuthManager& am)
 	});
 }
 
-TemplatedEndpointBuilder ApiProcessor::on(ApiProcessor::Method m, ApiProcessor::AccessRules ar) {
-	return TemplatedEndpointBuilder(*this, m, ar);
+TemplatedEndpointBuilder ApiProcessor::on(ApiProcessor::Method m) {
+	return TemplatedEndpointBuilder(*this, m);
 }
 
 void ApiProcessor::add(ApiProcessor::Method m, std::unique_ptr<Endpoint> ep) {
@@ -238,10 +235,9 @@ void Request::invalidateData() {
 
 
 
-TemplatedEndpointBuilder::TemplatedEndpointBuilder(ApiProcessor& tc, ApiProcessor::Method m, ApiProcessor::AccessRules ar)
+TemplatedEndpointBuilder::TemplatedEndpointBuilder(ApiProcessor& tc, ApiProcessor::Method m)
 : targetClass(tc),
-  method(m),
-  ar(ar) { }
+  method(m) { }
 
 TemplatedEndpointBuilder& TemplatedEndpointBuilder::path(std::string s) {
 	if (s.size() == 0) {
@@ -257,23 +253,25 @@ TemplatedEndpointBuilder& TemplatedEndpointBuilder::var() {
 	return *this;
 }
 
-Endpoint::Endpoint(ApiProcessor::AccessRules ar)
-: ar(ar) { }
+Endpoint::Endpoint(bool oe)
+: outsiderExclusive(oe) { }
 
 Endpoint::~Endpoint() { }
-
-ApiProcessor::AccessRules Endpoint::getRules() const {
-	return ar;
-}
 
 void Endpoint::exec(ll::shared_ptr<Request> req, nlohmann::json j, std::vector<std::string> arg) {
 	// If this method isn't implemented, then the other must be, right?
 	// This means that the request wasn't authenticated, or the token is invalid.
-	req->writeStatus("401 Unauthorized");
+	req->writeStatus("401 Unauthorized", 16);
 	req->end();
 }
 
 void Endpoint::exec(ll::shared_ptr<Request> req, nlohmann::json j, Session&, std::vector<std::string> arg) {
 	// If this endpoint doesn't have the authorized overload implemented, call the other method
-	exec(std::move(req), std::move(j), std::move(arg));
+	// ... if not exclusive to outsiders
+	if (!outsiderExclusive) {
+		exec(std::move(req), std::move(j), std::move(arg));
+	} else {
+		req->writeStatus("403 Forbidden", 13);
+		req->end();
+	}
 }

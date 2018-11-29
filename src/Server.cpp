@@ -135,7 +135,7 @@ void Server::kickInactivePlayers() {
 void Server::registerEndpoints() {
 	api.on(ApiProcessor::GET)
 		.path("status")
-	.end([this] (ll::shared_ptr<Request> req, nlohmann::json) {
+	.onOutsider(false, [this] (ll::shared_ptr<Request> req, nlohmann::json) {
 		Ipv4 ip(req->getResponse()->getHttpSocket()->getAddress().address);
 
 		bool banned = bm.isBanned(ip);
@@ -171,7 +171,7 @@ void Server::registerEndpoints() {
 		.var()
 		.var()
 		.var()
-	.end([this] (ll::shared_ptr<Request> req, nlohmann::json j, std::string worldName, i32 x, i32 y) {
+	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName, i32 x, i32 y) {
 		//std::cout << "[" << j << "]" << worldName << ","<< x << "," << y << std::endl;
 		if (!wm.verifyWorldName(worldName)) {
 			req->writeStatus("400 Bad Request");
@@ -190,6 +190,30 @@ void Server::registerEndpoints() {
 
 		// will encode the png in another thread if necessary and end the request when done
 		world.sendChunk(x, y, std::move(req));
+	});
+
+	api.on(ApiProcessor::GET)
+		.path("debug")
+	.onAny([] (ll::shared_ptr<Request> req, nlohmann::json j) {
+
+		req->end({
+			{ "call", "outsider" },
+			{ "body", std::move(j) }
+		});
+
+	}, [] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s) {
+
+		req->end({
+			{ "call", "friend" },
+			{ "body", std::move(j) },
+			{ "session", {
+				{ "user", s.getUser() },
+				{ "ip", s.getCreatorIp() },
+				{ "ua", s.getCreatorUserAgent() },
+				{ "lang", s.getPreferredLanguage() }
+			}}
+		});
+
 	});
 }
 

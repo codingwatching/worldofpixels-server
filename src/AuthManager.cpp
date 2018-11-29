@@ -1,6 +1,7 @@
 #include "AuthManager.hpp"
 
 #include <iostream>
+#include <algorithm>
 
 #include <misc/base64.hpp>
 #include <misc/utils.hpp>
