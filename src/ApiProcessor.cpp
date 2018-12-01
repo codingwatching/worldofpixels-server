@@ -37,7 +37,7 @@ ApiProcessor::ApiProcessor(uWS::Hub& h, AuthManager& am)
 		try {
 			urldecode(args);
 		} catch (const std::exception& e) {
-			(*rs)->writeStatus("400 Bad Request");
+			(*rs)->writeStatus("400 Bad Request", 15);
 			(*rs)->end({
 				{"reason", e.what()}
 			});
@@ -84,12 +84,21 @@ void ApiProcessor::exec(ll::shared_ptr<Request> r, nlohmann::json j, std::vector
 	int m = r->getData()->getMethod(); // lol
 
 	if (m == ApiProcessor::Method::INVALID) {
-		r->writeStatus("400 Bad Request");
+		r->writeStatus("400 Bad Request", 15);
 		r->end();
 		return;
 	}
 
-	Session * sess = getSession(*r.get());
+	Session * sess;
+	bool tokenSpecified;
+	std::tie(sess, tokenSpecified) = getSession(*r.get());
+
+	if (tokenSpecified && !sess) {
+		//r->writeStatus("498 Token expired/invalid", 25);
+		r->writeStatus("401 Unauthorized", 16);
+		r->end();
+		return;
+	}
 
 	for (auto& ep : definedEndpoints[m]) {
 		if (ep->verify(args)) {
@@ -102,7 +111,7 @@ void ApiProcessor::exec(ll::shared_ptr<Request> r, nlohmann::json j, std::vector
 				}
 			} catch (const std::exception& e) {
 				// The request wasn't freed yet. (1 ref left in socket userdata)
-				rref.writeStatus("400 Bad Request");
+				rref.writeStatus("400 Bad Request", 15);
 				rref.end({
 					{"reason", e.what()}
 				});
@@ -111,26 +120,26 @@ void ApiProcessor::exec(ll::shared_ptr<Request> r, nlohmann::json j, std::vector
 		}
 	}
 
-	r->writeStatus("501 Not Implemented");
-	//r->writeStatus("404 Not Found");
+	r->writeStatus("501 Not Implemented", 19);
+	//r->writeStatus("404 Not Found", 13);
 	r->end();
 }
 
-Session * ApiProcessor::getSession(Request& r) {
+std::pair<Session *, bool> ApiProcessor::getSession(Request& r) {
 	uWS::HttpRequest& req = *r.getData();
-	if (uWS::Header auth = req.getHeader("Authorization", 13)) {
+	if (uWS::Header auth = req.getHeader("authorization", 13)) {
 		std::string b64tok(auth.toString()); // change to string_view
 		sz_t i = b64tok.find("owop ");
 		if (i == std::string::npos) {
-			return nullptr;
+			return {nullptr, true};
 		}
 
 		i += 5;
 
-		return am.getSession(b64tok.c_str() + i, b64tok.size() - i);
+		return {am.getSession(b64tok.c_str() + i, b64tok.size() - i), true};
 	}
 
-	return nullptr;
+	return {nullptr, false};
 }
 
 
@@ -138,7 +147,12 @@ Session * ApiProcessor::getSession(Request& r) {
 Request::Request(uWS::HttpResponse * res, uWS::HttpRequest * req)
 : cancelHandler(nullptr),
   res(res),
-  req(req) { }
+  req(req),
+  ip(res->getHttpSocket()->getAddress().address) { }
+
+Ipv4 Request::getIp() {
+	return ip;
+}
 
 uWS::HttpResponse * Request::getResponse() {
 	return res;

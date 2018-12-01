@@ -15,6 +15,7 @@
 
 #include <misc/shared_ptr_ll.hpp>
 #include <misc/utils.hpp>
+#include <misc/base64.hpp>
 
 #include <nlohmann/json.hpp>
 
@@ -134,9 +135,45 @@ void Server::kickInactivePlayers() {
 
 void Server::registerEndpoints() {
 	api.on(ApiProcessor::GET)
+		.path("auth")
+		.path("guest")
+	.onOutsider(true, [this] (ll::shared_ptr<Request> req, nlohmann::json) {
+		std::string ua;
+		std::string lang("en");
+
+		if (auto h = req->getData()->getHeader("accept-language", 15)) {
+			auto langs(tokenize(h.toString(), ',', true));
+			if (langs.size() != 0) {
+				lang = std::move(langs[0]);
+				// example: "en-US;q=0.9", we want just "en" (for now)
+				sz_t i = lang.find_first_of("-;");
+				if (i != std::string::npos) {
+					lang.erase(i); // from - or ; to the end
+				}
+			}
+		}
+
+		if (auto h = req->getData()->getHeader("user-agent", 10)) {
+			ua = h.toString();
+		}
+
+		Ipv4 ip(req->getIp()); // done here because the move invalidates ref before calling getIp
+		am.createGuestSession(ip, ua, lang, [req{std::move(req)}] (auto token, Session& s) {
+			if (!req->isCancelled()) {
+				std::string b64tok(base64Encode(token.data(), token.size()));
+				req->end({
+					{ "token", std::move(b64tok) }
+				});
+			} else {
+				// expire the session?
+			}
+		});
+	});
+
+	api.on(ApiProcessor::GET)
 		.path("status")
 	.onOutsider(false, [this] (ll::shared_ptr<Request> req, nlohmann::json) {
-		Ipv4 ip(req->getResponse()->getHttpSocket()->getAddress().address);
+		Ipv4 ip(req->getIp());
 
 		bool banned = bm.isBanned(ip);
 
@@ -174,14 +211,14 @@ void Server::registerEndpoints() {
 	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName, i32 x, i32 y) {
 		//std::cout << "[" << j << "]" << worldName << ","<< x << "," << y << std::endl;
 		if (!wm.verifyWorldName(worldName)) {
-			req->writeStatus("400 Bad Request");
+			req->writeStatus("400 Bad Request", 15);
 			req->end();
 			return;
 		}
 
 		if (!wm.isLoaded(worldName)) {
 			// nginx is supposed to serve unloaded worlds and chunks.
-			req->writeStatus("404 Not Found");
+			req->writeStatus("404 Not Found", 13);
 			req->end();
 			return;
 		}

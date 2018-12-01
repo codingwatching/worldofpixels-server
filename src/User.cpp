@@ -5,6 +5,8 @@
 
 #include <Session.hpp>
 
+#include <misc/utils.hpp>
+
 #include <nlohmann/json.hpp>
 
 User::User(User::Id uid)
@@ -43,7 +45,7 @@ void User::delSession(Session& s) {
 }
 
 void to_json(nlohmann::json& j, const User& u) {
-	j["uid"] = u.getId();
+	j["uid"] = n2hexstr(u.getId());
 	j["username"] = u.getUsername();
 	j["guest"] = u.isGuest();
 }

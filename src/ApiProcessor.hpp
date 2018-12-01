@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <utility>
 #include <array>
 #include <vector>
 #include <memory>
@@ -61,7 +62,7 @@ public:
 
 private:
 	void exec(ll::shared_ptr<Request>, nlohmann::json, std::vector<std::string>);
-	Session * getSession(Request&);
+	std::pair<Session *, bool> getSession(Request&);
 };
 
 class Request {
@@ -70,10 +71,12 @@ class Request {
 
 	uWS::HttpResponse * res;
 	uWS::HttpRequest * req;
+	Ipv4 ip;
 
 public:
 	Request(uWS::HttpResponse *, uWS::HttpRequest *);
 
+	Ipv4 getIp();
 	uWS::HttpResponse * getResponse();
 	uWS::HttpRequest * getData();
 

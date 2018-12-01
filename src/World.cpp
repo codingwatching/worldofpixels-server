@@ -243,7 +243,7 @@ Chunk& World::getChunk(Chunk::Pos x, Chunk::Pos y) {
 // returns true if this function ended the request before returning
 bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request> req) {
 	if (!verifyChunkPos(x, y)) {
-		req->writeStatus("400 Bad Request");
+		req->writeStatus("400 Bad Request", 15);
 		req->end();
 		return true;
 	}
