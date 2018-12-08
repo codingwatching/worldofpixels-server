@@ -32,16 +32,19 @@ class AuthManager {
 	static constexpr auto defaultInactiveSessionLifespan = std::chrono::hours(48); // 2 days
 	static constexpr auto defaultInactiveGuestSessionLifespan = defaultInactiveSessionLifespan / 2;
 
-private:
 	TimedCallbacks& tc;
 	std::unordered_map<std::array<u8, 16>, Session> sessions;
 	std::unordered_map<User::Id, ll::weak_ptr<User>> userCache;
 	std::chrono::minutes sessionLife;
 	std::chrono::minutes guestSessionLife;
 	u32 guestIdCounter;
+	u32 sessionTimer;
+	std::array<u8, 12> guestSalt;
 
 public:
 	AuthManager(TimedCallbacks&);
+
+	void getOrLoadUser(User::Id, std::function<void(ll::shared_ptr<User>)>, bool load = true);
 
 	// Returns nullptr if there is no session by this token
 	Session * getSession(std::array<u8, 16>);
@@ -54,7 +57,13 @@ public:
 	void createGoogleSession(Ipv4, std::string ua, std::string lang,
 		std::string gtoken, std::function<void(std::array<u8, 16>, Session&)>);
 
+	void forEachSession(std::function<void(const std::array<u8, 16>&, const Session&)>);
+
 private:
+	bool updateTimer();
+
 	static std::array<u8, 16> createRandomToken();
-	u64 generateGuestId();
+	std::array<u8, 16> createGuestToken(Ipv4);
+
+	u64 generateGuestUserId();
 };

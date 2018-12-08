@@ -8,6 +8,9 @@
 #include <nlohmann/json.hpp>
 #include <uWS.h>
 
+#include <chrono>
+#include <iostream>
+
 using Endpoint = ApiProcessor::Endpoint;
 
 using TemplatedEndpointBuilder = ApiProcessor::TemplatedEndpointBuilder;
@@ -16,6 +19,7 @@ ApiProcessor::ApiProcessor(uWS::Hub& h, AuthManager& am)
 : am(am) {
 	// one connection can request multiple things before it closes
 	h.onHttpRequest([this] (uWS::HttpResponse * res, uWS::HttpRequest req, char * data, sz_t len, sz_t rem) {
+		//auto now(std::chrono::high_resolution_clock::now());
 		ll::shared_ptr<Request> * rs = static_cast<ll::shared_ptr<Request> *>(res->getHttpSocket()->getUserData());
 
 		if (!rs) {
@@ -48,6 +52,7 @@ ApiProcessor::ApiProcessor(uWS::Hub& h, AuthManager& am)
 
 		exec(*rs, std::move(j), std::move(args));
 		(*rs)->invalidateData();
+		//std::cout << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - now).count() << std::endl;
 	});
 
 	h.onCancelledHttpRequest([] (uWS::HttpResponse * res) {
@@ -180,6 +185,12 @@ void Request::writeHeader(std::string key, std::string value) {
 }
 
 void Request::end(const char * buf, sz_t size) {
+	if (!bufferedData.size()) {
+		writeStatus("200 OK", 6);
+	}
+
+#pragma message("temp. header")
+	writeHeader("Access-Control-Allow-Origin", "*");
 	if (bufferedData.size()) {
 		writeHeader("Content-Length", std::to_string(size));
 		write("\r\n", 2);
@@ -199,6 +210,7 @@ void Request::end(nlohmann::json j) {
 }
 
 void Request::end() {
+	writeHeader("Access-Control-Allow-Origin", "*");
 	if (!bufferedData.size()) {
 		res->end();
 	} else {

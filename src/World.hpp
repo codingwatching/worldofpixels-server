@@ -3,6 +3,7 @@
 #include <Storage.hpp>
 #include <Chunk.hpp>
 #include <Player.hpp>
+#include <User.hpp>
 #include <types.hpp>
 
 #include <misc/color.hpp>
@@ -79,6 +80,8 @@ public:
 	bool save();
 
 	sz_t getPlayerCount() const;
+	std::string getMotd() const;
+	User::Id getOwner() const;
 
 	void restrictDrawing(bool);
 
@@ -87,3 +90,5 @@ private:
 	bool tryUnloadAllChunks();
 	void tryUnloadWorld();
 };
+
+void to_json(nlohmann::json&, const World&);

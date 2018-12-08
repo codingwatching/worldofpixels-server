@@ -1,9 +1,11 @@
 #include "base64.hpp"
 
 #include <memory>
+
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/buffer.h>
+#include <openssl/md5.h>
 
 constexpr auto bioDeleter = [] (BIO * b) {
 	BIO_free_all(b);
@@ -31,6 +33,13 @@ std::string base64Encode(const u8 * buf, sz_t len) {
 
 	BUF_MEM * outBuf;
 	BIO_get_mem_ptr(b64.get(), &outBuf);
-	
+
 	return std::string(outBuf->data, outBuf->length);
+}
+
+std::array<u8, MD5_DIGEST_LENGTH> md5sum(const u8 * buf, sz_t len) {
+	std::array<u8, MD5_DIGEST_LENGTH> result;
+	MD5(buf, len, &result[0]);
+
+	return result;
 }

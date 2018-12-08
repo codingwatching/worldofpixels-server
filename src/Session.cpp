@@ -5,6 +5,8 @@
 #include <User.hpp>
 #include <Client.hpp>
 
+#include <nlohmann/json.hpp>
+
 #pragma message("TODO: Think if HTTP requests need to prevent session expires")
 
 Session::Session(ll::shared_ptr<User> usr, Ipv4 ip, std::string ua, std::string lang, std::chrono::minutes maxInactivity)
@@ -43,7 +45,7 @@ bool Session::isExpired() const { // always false if !activeClients.empty()
 	return activeClients.empty() && std::chrono::system_clock::now() >= expires;
 }
 
-User& Session::getUser() {
+User& Session::getUser() const {
 	return *user.get();
 }
 
@@ -65,4 +67,17 @@ const std::string& Session::getCreatorUserAgent() const {
 
 const std::string& Session::getPreferredLanguage() const {
 	return creatorLang;
+}
+
+void to_json(nlohmann::json& j, const Session& s) {
+	j = {
+		{ "created", std::chrono::duration_cast<std::chrono::milliseconds>(s.getCreationTime().time_since_epoch()).count() },
+		{ "expires", std::chrono::duration_cast<std::chrono::milliseconds>(s.getExpiryTime().time_since_epoch()).count() },
+		{ "user", s.getUser() },
+		{ "creator", {
+			{ "ip", s.getCreatorIp() },
+			{ "ua", s.getCreatorUserAgent() },
+			{ "lang", s.getPreferredLanguage() }
+		}}
+	};
 }

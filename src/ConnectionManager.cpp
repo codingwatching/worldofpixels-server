@@ -43,7 +43,16 @@ ConnectionManager::ConnectionManager(uWS::Hub& h, AuthManager& a, std::string pr
 			ltrim(s);
 			sz_t sep = s.find_first_of('+');
 			if (sep != std::string::npos) {
-				argList.emplace(s.substr(0, sep), s.substr(sep + 1));
+				std::string str(s.substr(sep + 1));
+
+				try {
+					urldecode(str);
+				} catch (const std::exception& e) {
+					ws->terminate();
+					return;
+				}
+
+				argList.emplace(s.substr(0, sep), std::move(str));
 			}
 		}
 

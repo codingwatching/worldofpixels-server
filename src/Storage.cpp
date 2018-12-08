@@ -123,7 +123,7 @@ RGB_u WorldStorage::getBackgroundColor() const {
 	return clr;
 }
 
-std::string WorldStorage::getMotd() {
+std::string WorldStorage::getMotd() const {
 	return getProp("motd");
 }
 

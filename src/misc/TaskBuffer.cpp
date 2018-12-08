@@ -84,7 +84,7 @@ void TaskBuffer::executeTasks() {
 			}
 		} else {
 			/* Only wait if the vector is empty */
-			cv.wait_for(uLock, std::chrono::seconds(1));
+			cv.wait_for(uLock, std::chrono::seconds(5));
 		}
 	} while (shouldRun.test_and_set());
 }

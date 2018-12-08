@@ -37,12 +37,12 @@ endif
 
 .PHONY: all rel udbg dirs clean clean-all
 
-all: CPPFLAGS += $(OPT_DBG)
-all: LDFLAGS  += $(LD_DBG)
+all: CPPFLAGS += $(OPT_UDBG)
+all: LDFLAGS += $(LD_UDBG)
 all: dirs $(TARGET)
 
-udbg: CPPFLAGS += $(OPT_UDBG)
-udbg: LDFLAGS += $(LD_UDBG)
+udbg: CPPFLAGS += $(OPT_DBG)
+udbg: LDFLAGS  += $(LD_DBG)
 udbg: dirs $(TARGET)
 
 rel: CPPFLAGS += $(OPT_REL)

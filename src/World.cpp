@@ -1,4 +1,4 @@
-#include "World.hpp"
+ #include "World.hpp"
 
 #include <Client.hpp>
 #include <User.hpp>
@@ -36,6 +36,14 @@ u64 key(i32 x, i32 y) {
 	s.p.x = x;
 	s.p.y = y;
 	return s.pos;
+}
+
+void to_json(nlohmann::json& j, const World& w) {
+	j = {
+		{ "owner", w.getOwner() },
+		{ "motd", w.getMotd() },
+		{ "playersOnline", w.getPlayerCount() }
+	};
 }
 
 /* World class functions */
@@ -90,9 +98,9 @@ void World::configurePlayerBuilder(Player::Builder& pb) {
 }
 
 void World::playerJoined(Player& pl) {
-	if (hasMotd()) {
+	/*if (hasMotd()) {
 		pl.tell(getMotd());
-	}
+	}*/
 
 	if (hasPassword()) {
 		pl.tell("This world has a password set. Use '/pass PASSWORD' to unlock drawing.");
@@ -362,6 +370,14 @@ bool World::save() {
 
 sz_t World::getPlayerCount() const {
 	return players.size();
+}
+
+std::string World::getMotd() const {
+	return WorldStorage::getMotd();
+}
+
+User::Id World::getOwner() const {
+	return 0;
 }
 
 void World::restrictDrawing(bool s) {

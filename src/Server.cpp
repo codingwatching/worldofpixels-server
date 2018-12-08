@@ -13,12 +13,6 @@
 #include <CaptchaChecker.hpp>
 #include <ProxyChecker.hpp>
 
-#include <misc/shared_ptr_ll.hpp>
-#include <misc/utils.hpp>
-#include <misc/base64.hpp>
-
-#include <nlohmann/json.hpp>
-
 #include <iostream>
 #include <utility>
 #include <exception>
@@ -56,11 +50,10 @@ Server::Server(std::string basePath)
 	conn.addToBeg<ProxyChecker>(hcli, tc).setState(ProxyChecker::State::OFF);
 	conn.addToBeg<CaptchaChecker>(hcli).setState(CaptchaChecker::State::OFF);
 	conn.addToBeg<WorldChecker>(wm);
-	conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>{
+	/*conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>{
 		"http://ourworldofpixels.com",
 		"https://ourworldofpixels.com",
-		"https://jsconsole.com"
-	});
+	});*/
 	conn.addToBeg<BanChecker>(bm);
 	conn.addToBeg<ConnectionCounter>();
 
@@ -130,127 +123,6 @@ void Server::kickInactivePlayers() {
 		if (c.inactiveKickEnabled() && now - c.getLastActionTime() > std::chrono::hours(1)) {
 			c.close();
 		}
-	});
-}
-
-void Server::registerEndpoints() {
-	api.on(ApiProcessor::GET)
-		.path("auth")
-		.path("guest")
-	.onOutsider(true, [this] (ll::shared_ptr<Request> req, nlohmann::json) {
-		std::string ua;
-		std::string lang("en");
-
-		if (auto h = req->getData()->getHeader("accept-language", 15)) {
-			auto langs(tokenize(h.toString(), ',', true));
-			if (langs.size() != 0) {
-				lang = std::move(langs[0]);
-				// example: "en-US;q=0.9", we want just "en" (for now)
-				sz_t i = lang.find_first_of("-;");
-				if (i != std::string::npos) {
-					lang.erase(i); // from - or ; to the end
-				}
-			}
-		}
-
-		if (auto h = req->getData()->getHeader("user-agent", 10)) {
-			ua = h.toString();
-		}
-
-		Ipv4 ip(req->getIp()); // done here because the move invalidates ref before calling getIp
-		am.createGuestSession(ip, ua, lang, [req{std::move(req)}] (auto token, Session& s) {
-			if (!req->isCancelled()) {
-				std::string b64tok(base64Encode(token.data(), token.size()));
-				req->end({
-					{ "token", std::move(b64tok) }
-				});
-			} else {
-				// expire the session?
-			}
-		});
-	});
-
-	api.on(ApiProcessor::GET)
-		.path("status")
-	.onOutsider(false, [this] (ll::shared_ptr<Request> req, nlohmann::json) {
-		Ipv4 ip(req->getIp());
-
-		bool banned = bm.isBanned(ip);
-
-		nlohmann::json j = {
-			{ "motd", "Almost done!" },
-			{ "activeHttpHandles", hcli.activeHandles() },
-			{ "uptime", std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - startupTime).count() }, // lol
-			{ "yourIp", ip },
-			{ "banned", banned }
-		};
-
-		nlohmann::json processorInfo;
-
-		conn.forEachProcessor([&processorInfo] (ConnectionProcessor& p) {
-			nlohmann::json j = p.getPublicInfo();
-			if (!j.is_null()) {
-				processorInfo[demangle(typeid(p))] = std::move(j);
-			}
-		});
-
-		j["connectInfo"] = std::move(processorInfo);
-
-		if (banned) {
-			j["banInfo"] = bm.getInfoFor(ip);
-		}
-
-		req->end(j);
-	});
-
-	api.on(ApiProcessor::GET)
-		.path("view")
-		.var()
-		.var()
-		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName, i32 x, i32 y) {
-		//std::cout << "[" << j << "]" << worldName << ","<< x << "," << y << std::endl;
-		if (!wm.verifyWorldName(worldName)) {
-			req->writeStatus("400 Bad Request", 15);
-			req->end();
-			return;
-		}
-
-		if (!wm.isLoaded(worldName)) {
-			// nginx is supposed to serve unloaded worlds and chunks.
-			req->writeStatus("404 Not Found", 13);
-			req->end();
-			return;
-		}
-
-		World& world = wm.getOrLoadWorld(worldName);
-
-		// will encode the png in another thread if necessary and end the request when done
-		world.sendChunk(x, y, std::move(req));
-	});
-
-	api.on(ApiProcessor::GET)
-		.path("debug")
-	.onAny([] (ll::shared_ptr<Request> req, nlohmann::json j) {
-
-		req->end({
-			{ "call", "outsider" },
-			{ "body", std::move(j) }
-		});
-
-	}, [] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s) {
-
-		req->end({
-			{ "call", "friend" },
-			{ "body", std::move(j) },
-			{ "session", {
-				{ "user", s.getUser() },
-				{ "ip", s.getCreatorIp() },
-				{ "ua", s.getCreatorUserAgent() },
-				{ "lang", s.getPreferredLanguage() }
-			}}
-		});
-
 	});
 }
 

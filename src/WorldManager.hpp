@@ -2,6 +2,7 @@
 
 #include <map>
 #include <string>
+#include <chrono>
 
 #include <World.hpp>
 
@@ -12,9 +13,16 @@ class Storage;
 class TimedCallbacks;
 
 class WorldManager {
+	using FloatMicros = std::chrono::duration<float, std::chrono::microseconds::period>;
+
 	std::map<std::string, World> worlds;
 	TaskBuffer& tb;
 	Storage& s;
+
+	FloatMicros averageTickInterval;
+	//std::chrono::microseconds averageTickCost;
+	std::chrono::steady_clock::time_point lastTickOn;
+
 	u32 tickTimer;
 	u32 ageTimer;
 
@@ -31,6 +39,8 @@ public:
 	bool saveAll();
 
 	sz_t unloadOldChunks(bool all = false);
+
+	float getTps() const;
 
 private:
 	void tickWorlds();

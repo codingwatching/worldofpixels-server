@@ -1,5 +1,6 @@
 #include "WorldManager.hpp"
 
+#include <iostream>
 #include <utility>
 #include <Storage.hpp>
 //#include <misc/TaskBuffer.hpp>
@@ -7,7 +8,9 @@
 
 WorldManager::WorldManager(TaskBuffer& tb, TimedCallbacks& tc, Storage& s)
 : tb(tb),
-  s(s) {
+  s(s),
+  averageTickInterval(50000),
+  lastTickOn(std::chrono::steady_clock::now()) {
 	tickTimer = tc.startTimer([this] {
 		tickWorlds();
 		return true;
@@ -78,10 +81,19 @@ sz_t WorldManager::unloadOldChunks(bool all) {
 	return totalUnloaded;
 }
 
+float WorldManager::getTps() const {
+	return (std::chrono::seconds(1) / averageTickInterval);
+}
+
 void WorldManager::tickWorlds() {
+	auto now(std::chrono::steady_clock::now());
+
 	for (auto& w : worlds) {
 		w.second.sendUpdates();
 	}
+
+	averageTickInterval = (now - lastTickOn + averageTickInterval) / 2.f;
+	lastTickOn = now;
 }
 
 void WorldManager::unload(std::map<std::string, World>::iterator it) {

@@ -54,7 +54,7 @@ public:
 
 	u16 getPixelRate();
 	RGB_u getBackgroundColor() const;
-	std::string getMotd();
+	std::string getMotd() const;
 	std::string getPassword();
 	bool getGlobalModeratorsAllowed(); // to be removed
 

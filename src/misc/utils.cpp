@@ -22,6 +22,8 @@
 	#include <cxxabi.h>
 #endif
 
+#include <misc/SeededMt19937.hpp>
+
 bool makeDir(const std::string& dir) {
 #ifndef __WIN32
 	return mkdir(dir.c_str(), 0755) == 0;
@@ -89,15 +91,9 @@ std::vector<std::string> tokenize(const std::string& str,
 	return tokens;
 }
 
-// std::random_device{}() returns a random number, used as seed for the
-// std::default_random_engine
-static std::default_random_engine rng(std::random_device{}());
+static SeededMt19937 rng;
 
-std::default_random_engine& getRandomEngine() {
-	return rng;
-}
-
-u8 randByte() {
+u32 randUint32() {
 	return rng();
 }
 

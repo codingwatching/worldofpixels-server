@@ -10,6 +10,8 @@
 #include <misc/fwd_uWS.h>
 #include <misc/Ipv4.hpp>
 
+#include <nlohmann/json_fwd.hpp>
+
 class Client;
 class User;
 
@@ -38,10 +40,12 @@ public:
 	void updateExpiryTime();
 	bool isExpired() const; // always false if !activeClients.empty()
 
-	User& getUser();
+	User& getUser() const;
 	std::chrono::system_clock::time_point getCreationTime() const;
 	std::chrono::system_clock::time_point getExpiryTime() const;
 	Ipv4 getCreatorIp() const;
 	const std::string& getCreatorUserAgent() const;
 	const std::string& getPreferredLanguage() const;
 };
+
+void to_json(nlohmann::json&, const Session&);
