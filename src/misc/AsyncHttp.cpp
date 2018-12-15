@@ -237,8 +237,12 @@ AsyncHttp::~AsyncHttp() {
 	mc(curl_multi_cleanup(multiHandle));
 }
 
-int AsyncHttp::activeHandles() {
+int AsyncHttp::activeHandles() const {
 	return handleCount;
+}
+
+int AsyncHttp::queuedRequests() const {
+	return pendingRequests.size();
 }
 
 void AsyncHttp::addRequest(std::string url, std::unordered_map<std::string, std::string> params,

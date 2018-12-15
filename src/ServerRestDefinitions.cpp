@@ -320,7 +320,10 @@ void Server::registerEndpoints() {
 
 		nlohmann::json j = {
 			{ "motd", "Almost done!" },
-			{ "activeHttpHandles", hcli.activeHandles() },
+			{ "http", {
+				{ "active", hcli.activeHandles() },
+				{ "queued", hcli.queuedRequests() }
+			}},
 			{ "uptime", std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - startupTime).count() }, // lol
 			{ "yourIp", ip },
 			{ "banned", banned },

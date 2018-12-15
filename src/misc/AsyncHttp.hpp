@@ -26,7 +26,8 @@ public:
 	AsyncHttp(uS::Loop *);
 	~AsyncHttp();
 
-	int activeHandles();
+	int activeHandles() const;
+	int queuedRequests() const;
 
 	void addRequest(std::string url, std::unordered_map<std::string, std::string> params,
 		std::function<void(AsyncHttp::Result)>);
