@@ -1,57 +1,106 @@
 #include "AsyncHttp.hpp"
 
-#include <memory>
-#include <algorithm>
-
 #include <uWS.h>
+#include <curl/curl.h>
 
 /* FIXME: Name resolves seem to be blocking (see: c-ares) */
 
+void mc(CURLMcode code) {
+	if (code != CURLM_OK && code != CURLM_BAD_SOCKET) {
+		throw std::runtime_error(std::string("CURLM call failed: ") + curl_multi_strerror(code));
+	}
+}
+
+void ec(CURLcode code) {
+	if (code != CURLE_OK) {
+		throw std::runtime_error(std::string("CURL call failed: ") + curl_easy_strerror(code));
+	}
+}
+
 static struct CurlRaii {
-	CurlRaii() { curl_global_init(CURL_GLOBAL_DEFAULT); }
+	CurlRaii() { ec(curl_global_init(CURL_GLOBAL_DEFAULT)); }
 	~CurlRaii() { curl_global_cleanup(); }
 } autoCleanup;
 
-AsyncHttp::Result::Result(Result && r)
-: successful(r.successful),
-  errnum(r.errnum),
-  responseCode(r.responseCode),
-  data(std::move(r.data)),
-  errorString(r.errorString) { }
+inline int curlEvToUv(int curlEvents) {
+	return (curlEvents & CURL_POLL_IN ? UV_READABLE : 0)
+		| (curlEvents & CURL_POLL_OUT ? UV_WRITABLE : 0);
+}
 
-AsyncHttp::Result::Result(CURLcode cc, long httpResp, std::string && data, const char * err)
-: successful(cc == CURLE_OK),
-  errnum(cc),
+inline int uvEvToCurl(int uvEvents) {
+	return (uvEvents & UV_READABLE ? CURL_CSELECT_IN : 0)
+		| (uvEvents & UV_WRITABLE ? CURL_CSELECT_OUT : 0);
+}
+
+class CurlHandle {
+	CURLM * multiHandle;
+	CURL * easyHandle;
+	std::function<void(AsyncHttp::Result)> onFinished;
+	std::string buffer;
+
+public:
+	CurlHandle(CURLM *, std::string, std::unordered_map<std::string, std::string>,
+			std::function<void(AsyncHttp::Result)>);
+	~CurlHandle();
+
+	CURL * getHandle();
+
+private:
+	bool finished(CURLcode result); /* Returns false if error occurred */
+	static int writer(char *, std::size_t, std::size_t, std::string *);
+
+	friend AsyncHttp;
+};
+
+class CurlSocket : public uS::Poll {
+	AsyncHttp * ah;
+	void (*cb)(AsyncHttp *, CurlSocket *, int, int);
+
+public:
+	CurlSocket(uS::Loop * loop, AsyncHttp * ah, curl_socket_t fd)
+	: Poll(loop, static_cast<int>(fd)),
+	  ah(ah) { }
+
+	void start(uS::Loop * loop, int events, void (*callback)(AsyncHttp *, CurlSocket *, int status, int events)) {
+		cb = callback;
+		Poll::setCb([] (Poll * p, int s, int e) {
+			CurlSocket * cs = static_cast<CurlSocket *>(p);
+			cs->cb(cs->ah, cs, s, uvEvToCurl(e));
+		});
+
+		Poll::start(loop, this, curlEvToUv(events));
+	}
+
+	void change(uS::Loop * loop, int events) {
+		Poll::change(loop, this, curlEvToUv(events));
+	}
+
+	void close(uS::Loop * loop) {
+		Poll::stop(loop);
+		Poll::close(loop, [] (Poll * p) {
+			delete static_cast<CurlSocket *>(p);
+		});
+	}
+};
+
+AsyncHttp::Result::Result(long httpResp, std::string data, const char * err)
+: successful(err == nullptr),
   responseCode(httpResp),
   data(std::move(data)),
   errorString(err) { }
 
 
-
-AsyncHttp::CurlHandle::CurlHandle(CurlHandle && c)
-: onFinished(std::move(c.onFinished)),
-  multiHandle(c.multiHandle),
-  easyHandle(c.easyHandle),
-  addedToMulti(c.addedToMulti),
-  buffer(std::move(c.buffer)) {
-	c.multiHandle = nullptr;
-	c.easyHandle = nullptr;
-	curl_easy_setopt(easyHandle, CURLOPT_PRIVATE, this);
-	curl_easy_setopt(easyHandle, CURLOPT_WRITEDATA, &buffer);
-}
-
-AsyncHttp::CurlHandle::CurlHandle(CURLM * mHdl, std::string url,
+CurlHandle::CurlHandle(CURLM * mHdl, std::string url,
 		std::unordered_map<std::string, std::string> params, std::function<void(AsyncHttp::Result)> cb)
-: onFinished(std::move(cb)),
-  multiHandle(mHdl),
+: multiHandle(mHdl),
   easyHandle(curl_easy_init()),
-  addedToMulti(false) {
+  onFinished(std::move(cb)) {
 	if (!easyHandle) {
 		throw std::bad_alloc();
 	}
 
 	bool first = true;
-	for (const auto & param : params) {
+	for (const auto& param : params) {
 		url += first ? '?' : '&';
 		first = false;
 		url += param.first; // should this be escaped as well?
@@ -63,61 +112,42 @@ AsyncHttp::CurlHandle::CurlHandle(CURLM * mHdl, std::string url,
 		curl_free(escaped);
 	}
 
-	curl_easy_setopt(easyHandle, CURLOPT_PRIVATE, this);
-	//curl_easy_setopt(easyHandle, CURLOPT_TIMEOUT, 60);
-	curl_easy_setopt(easyHandle, CURLOPT_TCP_FASTOPEN, 1);
-	curl_easy_setopt(easyHandle, CURLOPT_WRITEFUNCTION, &AsyncHttp::CurlHandle::writer);
-	curl_easy_setopt(easyHandle, CURLOPT_WRITEDATA, &buffer);
-	curl_easy_setopt(easyHandle, CURLOPT_PIPEWAIT, 1);
+	ec(curl_easy_setopt(easyHandle, CURLOPT_PRIVATE, this));
+	ec(curl_easy_setopt(easyHandle, CURLOPT_WRITEFUNCTION, &CurlHandle::writer));
+	ec(curl_easy_setopt(easyHandle, CURLOPT_WRITEDATA, &buffer));
+	ec(curl_easy_setopt(easyHandle, CURLOPT_URL, url.c_str()));
 
-	curl_easy_setopt(easyHandle, CURLOPT_URL, url.c_str());
+	//ec(curl_easy_setopt(easyHandle, CURLOPT_TIMEOUT, 60)); // idk if this caused any problems
+	//ec(curl_easy_setopt(easyHandle, CURLOPT_TCP_FASTOPEN, 1)); // makes http requests fail?
+	ec(curl_easy_setopt(easyHandle, CURLOPT_TCP_NODELAY, 0));
+	ec(curl_easy_setopt(easyHandle, CURLOPT_PIPEWAIT, 1));
+	//ec(curl_easy_setopt(easyHandle, CURLOPT_VERBOSE, 1));
 
-	addToMulti();
+	mc(curl_multi_add_handle(multiHandle, easyHandle));
 }
 
-AsyncHttp::CurlHandle::~CurlHandle() {
-	if (easyHandle) {
-		rmFromMulti();
-		curl_easy_cleanup(easyHandle);
-		easyHandle = nullptr;
-	}
+CurlHandle::~CurlHandle() {
+	mc(curl_multi_remove_handle(multiHandle, easyHandle));
+	curl_easy_cleanup(easyHandle);
 }
 
-void AsyncHttp::CurlHandle::addToMulti() {
-	if (!addedToMulti) {
-		curl_multi_add_handle(multiHandle, easyHandle);
-		addedToMulti = true;
-	}
-}
-
-void AsyncHttp::CurlHandle::rmFromMulti() {
-	if (addedToMulti) {
-		curl_multi_remove_handle(multiHandle, easyHandle);
-		addedToMulti = false;
-	}
-}
-
-CURL * AsyncHttp::CurlHandle::getHandle() {
+CURL * CurlHandle::getHandle() {
 	return easyHandle;
 }
 
-bool AsyncHttp::CurlHandle::finished(CURLcode result) {
+bool CurlHandle::finished(CURLcode result) {
 	bool successful = result == CURLE_OK;
 	long responseCode = -1;
-	curl_easy_getinfo(easyHandle, CURLINFO_RESPONSE_CODE, &responseCode);
+	ec(curl_easy_getinfo(easyHandle, CURLINFO_RESPONSE_CODE, &responseCode));
 
-	onFinished({result, responseCode, std::move(buffer),
+	onFinished({responseCode, std::move(buffer),
 			successful ? nullptr : curl_easy_strerror(result)});
 
 	return successful;
 }
 
-int AsyncHttp::CurlHandle::writer(char * data, std::size_t size,
-		std::size_t nmemb, std::string * writerData) {
-	if (writerData == nullptr) {
-		return 0;
-	}
-
+int CurlHandle::writer(char * data, std::size_t size, std::size_t nmemb, std::string * writerData) {
+	// writerData will never be null
 	writerData->append(data, size * nmemb);
 
 	return size * nmemb;
@@ -125,41 +155,86 @@ int AsyncHttp::CurlHandle::writer(char * data, std::size_t size,
 
 
 
-
-AsyncHttp::AsyncHttp(AsyncHttp && http)
-: timer(http.timer),
-  pendingRequests(std::move(http.pendingRequests)),
-  isTimerRunning(http.isTimerRunning),
-  multiHandle(http.multiHandle),
-  handleCount(http.handleCount) {
-	http.timer = nullptr;
-	http.multiHandle = nullptr;
-}
-
 AsyncHttp::AsyncHttp(uS::Loop * loop)
-: timer(new uS::Timer(loop)),
-  isTimerRunning(false),
+: loop(loop),
+  timer(new uS::Timer(loop)),
   multiHandle(curl_multi_init()),
-  handleCount(0) {
+  handleCount(0),
+  isTimerRunning(false) {
 	if (!multiHandle) {
 		throw std::bad_alloc();
 	}
 
 	timer->setData(this);
 
-	curl_multi_setopt(multiHandle, CURLMOPT_PIPELINING, CURLPIPE_HTTP1 | CURLPIPE_MULTIPLEX);
-	curl_multi_setopt(multiHandle, CURLMOPT_MAX_TOTAL_CONNECTIONS, 4);
-	curl_multi_setopt(multiHandle, CURLMOPT_MAX_HOST_CONNECTIONS, 4);
-	curl_multi_setopt(multiHandle, CURLMOPT_MAXCONNECTS, 6);
+	mc(curl_multi_setopt(multiHandle, CURLMOPT_PIPELINING, CURLPIPE_HTTP1 | CURLPIPE_MULTIPLEX));
+	mc(curl_multi_setopt(multiHandle, CURLMOPT_MAX_TOTAL_CONNECTIONS, 8));
+	mc(curl_multi_setopt(multiHandle, CURLMOPT_MAX_HOST_CONNECTIONS, 1));
+	mc(curl_multi_setopt(multiHandle, CURLMOPT_MAXCONNECTS, 8));
+
+	mc(curl_multi_setopt(multiHandle, CURLMOPT_TIMERDATA, this));
+	mc(curl_multi_setopt(multiHandle, CURLMOPT_TIMERFUNCTION, +[] (CURLM * multi, long tmo_ms, void * u) -> int {
+		// notice the plus sign on the lambda definition, needed to get the pointer to it
+		AsyncHttp * ah = static_cast<AsyncHttp *>(u);
+		switch (tmo_ms) {
+			case -1:
+				ah->stopTimer();
+				break;
+
+			case 0:
+				mc(curl_multi_socket_action(ah->multiHandle, CURL_SOCKET_TIMEOUT, 0, &ah->handleCount));
+				break;
+
+			default:
+				ah->startTimer(tmo_ms);
+				break;
+		}
+
+		return 0;
+	}));
+
+	mc(curl_multi_setopt(multiHandle, CURLMOPT_SOCKETDATA, this));
+	mc(curl_multi_setopt(multiHandle, CURLMOPT_SOCKETFUNCTION, +[] (CURL * e, curl_socket_t s, int what, void * up, void * sp) -> int {
+		// listen for event what on socket s of easy handle e, s priv data on sp
+		AsyncHttp * ah = static_cast<AsyncHttp *>(up);
+		CurlSocket * cs = static_cast<CurlSocket *>(sp);
+
+		if (what == CURL_POLL_REMOVE) {
+			if (cs) {
+				cs->close(ah->loop); // also deletes when the event loop is ready
+				mc(curl_multi_assign(ah->multiHandle, s, nullptr));
+			}
+		} else {
+			if (!cs) {
+				cs = new CurlSocket(ah->loop, ah, s);
+				cs->start(ah->loop, what, +[] (AsyncHttp * ah, CurlSocket * cs, int status, int events) {
+					mc(curl_multi_socket_action(ah->multiHandle, reinterpret_cast<curl_socket_t>(cs->getFd()), events, &ah->handleCount));
+					ah->processCompleted();
+
+					if (ah->handleCount == 0) {
+						ah->stopTimer();
+					}
+				});
+
+				mc(curl_multi_assign(ah->multiHandle, s, cs));
+			} else {
+				cs->change(ah->loop, what);
+			}
+		}
+
+		return 0;
+	}));
 }
 
 AsyncHttp::~AsyncHttp() {
 	stopTimer();
 	timer->close(); /* This deletes the timer */
-	pendingRequests.clear();
-	if (multiHandle) {
-		curl_multi_cleanup(multiHandle);
+
+	for (CurlHandle * ch : pendingRequests) {
+		delete ch;
 	}
+
+	mc(curl_multi_cleanup(multiHandle));
 }
 
 int AsyncHttp::activeHandles() {
@@ -168,40 +243,34 @@ int AsyncHttp::activeHandles() {
 
 void AsyncHttp::addRequest(std::string url, std::unordered_map<std::string, std::string> params,
 		std::function<void(AsyncHttp::Result)> onFinished) {
-	pendingRequests.push_back(std::make_unique<CurlHandle>(multiHandle, std::move(url), std::move(params), std::move(onFinished)));
-	setNewTimeout();
+	pendingRequests.emplace(new CurlHandle(multiHandle, std::move(url), std::move(params), std::move(onFinished)));
 }
 
 void AsyncHttp::addRequest(std::string url, std::function<void(AsyncHttp::Result)> onFinished) {
-	addRequest(std::move(url), {{}}, std::move(onFinished));
+	addRequest(std::move(url), {}, std::move(onFinished));
 }
 
 void AsyncHttp::update() {
-	curl_multi_perform(multiHandle, &handleCount);
-	if (handleCount < pendingRequests.size()) {
-		processCompleted();
-	}
-
-	if (handleCount != 0) {
-		setNewTimeout();
-	}
+	mc(curl_multi_socket_action(multiHandle, CURL_SOCKET_TIMEOUT, 0, &handleCount));
+	processCompleted();
 }
 
 void AsyncHttp::processCompleted() {
 	int queued;
+	CurlHandle * hdl;
+
 	while (CURLMsg * m = curl_multi_info_read(multiHandle, &queued)) {
 		if (m->msg == CURLMSG_DONE) {
-			CurlHandle * hdl = nullptr;
-			curl_easy_getinfo(m->easy_handle, CURLINFO_PRIVATE, &hdl);
-			auto result = std::find_if(pendingRequests.begin(), pendingRequests.end(), [hdl] (std::unique_ptr<CurlHandle> const & vhdl) {
-				return vhdl.get() == hdl;
-			});
+			ec(curl_easy_getinfo(m->easy_handle, CURLINFO_PRIVATE, &hdl));
 
-			if (result != pendingRequests.end()) {
-				auto moved = std::move(*result);
-				pendingRequests.erase(result);
-				moved->finished(m->data.result);
+			auto search = pendingRequests.find(hdl);
+
+			if (search != pendingRequests.end()) {
+				pendingRequests.erase(search);
 			}
+
+			hdl->finished(m->data.result);
+			delete hdl;
 		}
 	}
 }
@@ -221,16 +290,6 @@ void AsyncHttp::stopTimer() {
 	if (isTimerRunning) {
 		timer->stop();
 		isTimerRunning = false;
-	}
-}
-
-void AsyncHttp::setNewTimeout() {
-	long timeout;
-	curl_multi_timeout(multiHandle, &timeout);
-	if (timeout == -1) {
-		startTimer(500);
-	} else {
-		startTimer(timeout > 100 ? 100 : timeout);
 	}
 }
 

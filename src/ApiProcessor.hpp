@@ -72,11 +72,12 @@ class Request {
 	uWS::HttpResponse * res;
 	uWS::HttpRequest * req;
 	Ipv4 ip;
+	bool isProxied; // aka request went through nginx
 
 public:
 	Request(uWS::HttpResponse *, uWS::HttpRequest *);
 
-	Ipv4 getIp();
+	Ipv4 getIp() const;
 	uWS::HttpResponse * getResponse();
 	uWS::HttpRequest * getData();
 
@@ -97,6 +98,7 @@ private:
 	void cancel(ll::shared_ptr<Request>);
 	void updateData(uWS::HttpResponse *, uWS::HttpRequest *);
 	void invalidateData();
+	void maybeUpdateIp();
 
 	friend ApiProcessor;
 };

@@ -14,6 +14,7 @@ public:
 	Ipv4(const char *); // string -> u32 conv.
 	Ipv4(u32);
 
+	bool isLocal() const;
 	u32 get() const;
 	std::string toString() const;
 

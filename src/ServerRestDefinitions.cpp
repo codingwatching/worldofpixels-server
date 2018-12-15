@@ -1,5 +1,7 @@
 #include "Server.hpp"
 
+#include <iostream>
+
 #include <WorldManager.hpp>
 #include <User.hpp>
 #include <Player.hpp>
@@ -12,6 +14,23 @@
 #include <nlohmann/json.hpp>
 
 void Server::registerEndpoints() {
+	/*api.on(ApiProcessor::GET)
+		.path("get")
+		.var()
+	.onOutsider(true, [this] (ll::shared_ptr<Request> req, nlohmann::json, std::string url) {
+		hcli.addRequest(std::move(url), [req{std::move(req)}] (auto result) {
+			std::cout << "done: " << result.successful << " (" << result.responseCode << "): ";
+			if (result.errorString) std::cout << result.errorString;
+			if (req->isCancelled()) {
+				std::cout << " [Request was cancelled!!]" << std::endl;
+				return;
+			}
+
+			std::cout << std::endl;
+			req->end(result.data.c_str(), result.data.size());
+		});
+	});*/
+
 	api.on(ApiProcessor::GET)
 		.path("auth")
 		.path("guest")

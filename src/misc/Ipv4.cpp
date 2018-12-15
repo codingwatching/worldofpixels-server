@@ -18,6 +18,11 @@ Ipv4::Ipv4() // required by json's serializer
 Ipv4::Ipv4(u32 address)
 : address(address) { }
 
+bool Ipv4::isLocal() const {
+	// address order is BE? 127.0.0.1 = 0x0100007f
+	return (address & 0xff) == 0x7f;
+}
+
 u32 Ipv4::get() const {
 	return address;
 }

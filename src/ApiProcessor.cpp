@@ -153,9 +153,12 @@ Request::Request(uWS::HttpResponse * res, uWS::HttpRequest * req)
 : cancelHandler(nullptr),
   res(res),
   req(req),
-  ip(res->getHttpSocket()->getAddress().address) { }
+  ip(res->getHttpSocket()->getAddress().address),
+  isProxied(ip.isLocal()) {
+	maybeUpdateIp();
+}
 
-Ipv4 Request::getIp() {
+Ipv4 Request::getIp() const {
 	return ip;
 }
 
@@ -253,12 +256,20 @@ void Request::updateData(uWS::HttpResponse * res, uWS::HttpRequest * req) {
 	this->req = req;
 	cancelHandler = nullptr;
 	bufferedData.clear();
+	maybeUpdateIp();
 }
 
 void Request::invalidateData() {
 	req = nullptr;
 }
 
+void Request::maybeUpdateIp() {
+	if (isProxied) {
+		if (uWS::Header realIp = req->getHeader("x-real-ip", 9)) {
+			ip = Ipv4(realIp.value);
+		}
+	}
+}
 
 
 TemplatedEndpointBuilder::TemplatedEndpointBuilder(ApiProcessor& tc, ApiProcessor::Method m)

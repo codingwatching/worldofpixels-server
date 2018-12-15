@@ -22,6 +22,7 @@ void AuthManager::getOrLoadUser(User::Id uid, std::function<void(ll::shared_ptr<
 	if (it == userCache.end()) {
 		if (load) {
 			// load the user!
+			f(nullptr);
 		} else {
 			f(nullptr);
 		}
