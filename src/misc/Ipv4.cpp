@@ -1,6 +1,11 @@
 #include "Ipv4.hpp"
 
-#include <arpa/inet.h>
+#ifdef __WIN32
+	#include <Winsock2.h>
+#else
+	#include <arpa/inet.h>
+#endif
+
 #include <stdexcept>
 
 #include <nlohmann/json.hpp>

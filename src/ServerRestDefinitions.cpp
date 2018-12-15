@@ -14,7 +14,7 @@
 #include <nlohmann/json.hpp>
 
 void Server::registerEndpoints() {
-	/*api.on(ApiProcessor::GET)
+	/*api.on(ApiProcessor::MGET)
 		.path("get")
 		.var()
 	.onOutsider(true, [this] (ll::shared_ptr<Request> req, nlohmann::json, std::string url) {
@@ -31,7 +31,7 @@ void Server::registerEndpoints() {
 		});
 	});*/
 
-	api.on(ApiProcessor::GET)
+	api.on(ApiProcessor::MGET)
 		.path("auth")
 		.path("guest")
 	.onOutsider(true, [this] (ll::shared_ptr<Request> req, nlohmann::json) {
@@ -70,7 +70,7 @@ void Server::registerEndpoints() {
 	//////////////////// /users
 
 	// Get local user
-	api.on(ApiProcessor::GET) // definition order matters here!
+	api.on(ApiProcessor::MGET) // definition order matters here!
 		.path("users")
 		.path("@me")
 	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s) {
@@ -78,7 +78,7 @@ void Server::registerEndpoints() {
 	});
 
 	// Get user
-	api.on(ApiProcessor::GET)
+	api.on(ApiProcessor::MGET)
 		.path("users")
 		.var()
 	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, User::Id uid) {
@@ -90,7 +90,7 @@ void Server::registerEndpoints() {
 	});
 
 	// Modify user
-	api.on(ApiProcessor::PATCH)
+	api.on(ApiProcessor::MPATCH)
 		.path("users")
 		.var()
 	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, User::Id uid) {
@@ -99,7 +99,7 @@ void Server::registerEndpoints() {
 	});
 
 	// Kick user
-	api.on(ApiProcessor::POST)
+	api.on(ApiProcessor::MPOST)
 		.path("users")
 		.var()
 		.path("kick")
@@ -108,7 +108,7 @@ void Server::registerEndpoints() {
 	});
 
 	// Ban user
-	api.on(ApiProcessor::POST)
+	api.on(ApiProcessor::MPOST)
 		.path("users")
 		.var()
 		.path("ban")
@@ -118,7 +118,7 @@ void Server::registerEndpoints() {
 
 	/////////////////////// /worlds
 
-	api.on(ApiProcessor::GET) // Get world
+	api.on(ApiProcessor::MGET) // Get world
 		.path("worlds")
 		.var()
 	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName) {
@@ -130,14 +130,14 @@ void Server::registerEndpoints() {
 		}
 	});
 
-	api.on(ApiProcessor::PATCH) // Modify world
+	api.on(ApiProcessor::MPATCH) // Modify world
 		.path("worlds")
 		.var()
 	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName) {
 
 	});
 
-	api.on(ApiProcessor::GET) // Switch world
+	api.on(ApiProcessor::MGET) // Switch world
 		.path("worlds")
 		.var()
 		.path("cursors")
@@ -149,7 +149,7 @@ void Server::registerEndpoints() {
 
 	});
 
-	api.on(ApiProcessor::GET) // Teleport to pos
+	api.on(ApiProcessor::MGET) // Teleport to pos
 		.path("worlds")
 		.var()
 		.path("cursors")
@@ -162,7 +162,7 @@ void Server::registerEndpoints() {
 
 	});
 
-	api.on(ApiProcessor::GET) // Teleport to player
+	api.on(ApiProcessor::MGET) // Teleport to player
 		.path("worlds")
 		.var()
 		.path("cursors")
@@ -174,7 +174,7 @@ void Server::registerEndpoints() {
 
 	});
 
-	api.on(ApiProcessor::GET) // Kick own player
+	api.on(ApiProcessor::MGET) // Kick own player
 		.path("worlds")
 		.var()
 		.path("cursors")
@@ -184,7 +184,7 @@ void Server::registerEndpoints() {
 
 	});
 
-	api.on(ApiProcessor::GET) // Get world roles
+	api.on(ApiProcessor::MGET) // Get world roles
 		.path("worlds")
 		.var()
 		.path("roles")
@@ -192,7 +192,7 @@ void Server::registerEndpoints() {
 
 	});
 
-	api.on(ApiProcessor::POST) // Create world role
+	api.on(ApiProcessor::MPOST) // Create world role
 		.path("worlds")
 		.var()
 		.path("roles")
@@ -200,7 +200,7 @@ void Server::registerEndpoints() {
 
 	});
 
-	api.on(ApiProcessor::PATCH) // Modify world role
+	api.on(ApiProcessor::MPATCH) // Modify world role
 		.path("worlds")
 		.var()
 		.path("roles")
@@ -209,7 +209,7 @@ void Server::registerEndpoints() {
 
 	});
 
-	api.on(ApiProcessor::DELETE) // Delete world role
+	api.on(ApiProcessor::MDELETE) // Delete world role
 		.path("worlds")
 		.var()
 		.path("roles")
@@ -218,7 +218,7 @@ void Server::registerEndpoints() {
 
 	});
 
-	api.on(ApiProcessor::PUT) // Add user to world role
+	api.on(ApiProcessor::MPUT) // Add user to world role
 		.path("worlds")
 		.var()
 		.path("roles")
@@ -228,7 +228,7 @@ void Server::registerEndpoints() {
 
 	});
 
-	api.on(ApiProcessor::DELETE) // Delete user from world role
+	api.on(ApiProcessor::MDELETE) // Delete user from world role
 		.path("worlds")
 		.var()
 		.path("roles")
@@ -240,22 +240,14 @@ void Server::registerEndpoints() {
 
 	/////////////////////// /chats
 
-	api.on(ApiProcessor::GET) // Get chat
+	api.on(ApiProcessor::MGET) // Get chat
 		.path("chats")
 		.var()
 	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string chatId) {
 
 	});
 
-	api.on(ApiProcessor::GET) // Get messages
-		.path("chats")
-		.var()
-		.path("messages")
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string chatId) {
-
-	});
-
-	api.on(ApiProcessor::POST) // Send message
+	api.on(ApiProcessor::MGET) // Get messages
 		.path("chats")
 		.var()
 		.path("messages")
@@ -263,7 +255,15 @@ void Server::registerEndpoints() {
 
 	});
 
-	api.on(ApiProcessor::GET) // Get message
+	api.on(ApiProcessor::MPOST) // Send message
+		.path("chats")
+		.var()
+		.path("messages")
+	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string chatId) {
+
+	});
+
+	api.on(ApiProcessor::MGET) // Get message
 		.path("chats")
 		.var()
 		.path("messages")
@@ -272,7 +272,7 @@ void Server::registerEndpoints() {
 
 	});
 
-	api.on(ApiProcessor::PATCH) // Edit message
+	api.on(ApiProcessor::MPATCH) // Edit message
 		.path("chats")
 		.var()
 		.path("messages")
@@ -281,7 +281,7 @@ void Server::registerEndpoints() {
 
 	});
 
-	api.on(ApiProcessor::DELETE) // Delete message
+	api.on(ApiProcessor::MDELETE) // Delete message
 		.path("chats")
 		.var()
 		.path("messages")
@@ -292,14 +292,14 @@ void Server::registerEndpoints() {
 
 	/////////////////////// /emotes
 
-	api.on(ApiProcessor::GET)
+	api.on(ApiProcessor::MGET)
 		.path("emotes")
 		.var()
 	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string emoteId) {
 
 	});
 
-	api.on(ApiProcessor::GET)
+	api.on(ApiProcessor::MGET)
 		.path("emotes")
 		.var()
 		.path("image")
@@ -311,7 +311,7 @@ void Server::registerEndpoints() {
 	// Extras
 	///////////////////////
 
-	api.on(ApiProcessor::GET)
+	api.on(ApiProcessor::MGET)
 		.path("status")
 	.onOutsider(false, [this] (ll::shared_ptr<Request> req, nlohmann::json) {
 		Ipv4 ip(req->getIp());
@@ -345,7 +345,7 @@ void Server::registerEndpoints() {
 		req->end(j);
 	});
 
-	api.on(ApiProcessor::GET)
+	api.on(ApiProcessor::MGET)
 		.path("view")
 		.var()
 		.var()
@@ -371,7 +371,7 @@ void Server::registerEndpoints() {
 		world.sendChunk(x, y, std::move(req));
 	});
 
-	api.on(ApiProcessor::GET)
+	api.on(ApiProcessor::MGET)
 		.path("tokenlist")
 	.onOutsider(false, [this] (ll::shared_ptr<Request> req, nlohmann::json) {
 		nlohmann::json j;
@@ -383,7 +383,7 @@ void Server::registerEndpoints() {
 		req->end(std::move(j));
 	});
 
-	api.on(ApiProcessor::GET)
+	api.on(ApiProcessor::MGET)
 		.path("debug")
 	.onAny([] (ll::shared_ptr<Request> req, nlohmann::json j) {
 

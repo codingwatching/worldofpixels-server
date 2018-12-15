@@ -39,7 +39,7 @@ bool installSignalHandler() {
 	return SetConsoleCtrlHandler(signalHandler, TRUE) == TRUE;
 }
 
-#elif __linux__
+#else
 #include <csignal>
 
 void signalHandler(int s) {
