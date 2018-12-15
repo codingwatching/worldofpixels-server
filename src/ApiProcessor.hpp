@@ -36,17 +36,17 @@ public:
 	template<typename OutsiderFunc, typename FriendFunc>
 	class UniversalTemplatedEndpoint;
 
-	enum Method {
-		GET,
-		POST,
-		PUT,
-		DELETE,
-		PATCH,
-		OPTIONS,
-		HEAD,
-		TRACE,
-		CONNECT,
-		INVALID
+	enum Method : u8 {
+		MGET,
+		MPOST,
+		MPUT,
+		MDELETE,
+		MPATCH,
+		MOPTIONS,
+		MHEAD,
+		MTRACE,
+		MCONNECT,
+		MINVALID
 	};
 
 private:

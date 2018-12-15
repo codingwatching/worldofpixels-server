@@ -88,7 +88,7 @@ void ApiProcessor::add(ApiProcessor::Method m, std::unique_ptr<Endpoint> ep) {
 void ApiProcessor::exec(ll::shared_ptr<Request> r, nlohmann::json j, std::vector<std::string> args) {
 	int m = r->getData()->getMethod(); // lol
 
-	if (m == ApiProcessor::Method::INVALID) {
+	if (m == ApiProcessor::Method::MINVALID) {
 		r->writeStatus("400 Bad Request", 15);
 		r->end();
 		return;
@@ -188,12 +188,6 @@ void Request::writeHeader(std::string key, std::string value) {
 }
 
 void Request::end(const char * buf, sz_t size) {
-	if (!bufferedData.size()) {
-		writeStatus("200 OK", 6);
-	}
-
-#pragma message("temp. header")
-	writeHeader("Access-Control-Allow-Origin", "*");
 	if (bufferedData.size()) {
 		writeHeader("Content-Length", std::to_string(size));
 		write("\r\n", 2);
@@ -213,7 +207,6 @@ void Request::end(nlohmann::json j) {
 }
 
 void Request::end() {
-	writeHeader("Access-Control-Allow-Origin", "*");
 	if (!bufferedData.size()) {
 		res->end();
 	} else {

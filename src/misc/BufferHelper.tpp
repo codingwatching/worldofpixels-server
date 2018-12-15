@@ -1,5 +1,8 @@
 #include <cstring>
-#include <byteswap.h>
+
+#define bswap_64(x) __builtin_bswap64(x)
+#define bswap_32(x) __builtin_bswap32(x)
+#define bswap_16(x) __builtin_bswap16(x)
 
 static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ || __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__,
 	"Host endianness not supported!");
