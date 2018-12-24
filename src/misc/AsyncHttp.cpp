@@ -153,8 +153,6 @@ int CurlHandle::writer(char * data, std::size_t size, std::size_t nmemb, std::st
 	return size * nmemb;
 }
 
-
-
 AsyncHttp::AsyncHttp(uS::Loop * loop)
 : loop(loop),
   timer(new uS::Timer(loop)),

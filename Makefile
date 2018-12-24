@@ -29,7 +29,7 @@ CPPFLAGS += -I $(JSON)/include/
 LDFLAGS  += -L $(UWS)/
 
 LIBPNGLDL = $(shell libpng-config --ldflags)
-LDLIBS   += -lssl -lz -lcrypto -lcurl -lpthread $(LIBPNGLDL)
+LDLIBS   += -lssl -lz -lcrypto -lcurl -lpthread -lpq $(LIBPNGLDL)
 
 ifeq ($(OS),Windows_NT)
 	LDLIBS += -luv -lWs2_32 -lpsapi -liphlpapi -luserenv

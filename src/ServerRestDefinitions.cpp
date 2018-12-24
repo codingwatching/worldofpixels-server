@@ -74,7 +74,14 @@ void Server::registerEndpoints() {
 		.path("users")
 		.path("@me")
 	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s) {
-		req->end(s.getUser());
+		User& u(s.getUser());
+
+		req->end({
+			{ "public", u },
+			{ "private", {
+				{ "lastWorld", u.getLastWorld() }
+			}}
+		});
 	});
 
 	// Get user
@@ -323,6 +330,10 @@ void Server::registerEndpoints() {
 			{ "http", {
 				{ "active", hcli.activeHandles() },
 				{ "queued", hcli.queuedRequests() }
+			}},
+			{ "sql", {
+				{ "connected", ap.isConnected() },
+				{ "queued", ap.queuedQueries() }
 			}},
 			{ "uptime", std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - startupTime).count() }, // lol
 			{ "yourIp", ip },

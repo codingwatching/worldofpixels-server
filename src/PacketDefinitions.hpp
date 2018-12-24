@@ -11,23 +11,18 @@ enum tc : u8 {
 	AUTH_PROGRESS,
 	AUTH_OK,
 	AUTH_ERROR,
-	CMD_LIST,
-	CMD_RESULT,
+	PLAYER_DATA,
+	USER_UPDATE,
 	SHOW_PLAYERS,
 	HIDE_PLAYERS,
-	CLIENT_DATA,
-	/*PLAYER_JOIN,
-	PLAYER_LEFT,*/
 	WORLD_UPDATE,
+	TOOL_STATE,
 	CHAT_MESSAGE,
-	PROTECTION_UPD
+	PROTECTION_UPD,
+	STATS
 
-	/*SET_ID,
-	UPDATE,
-	CHUNKDATA,
-	TELEPORT,
+	/*TELEPORT, // use player data for this?
 	PERMISSIONS,
-	CAPTCHA_REQUIRED,
 	SET_PQUOTA*/
 };
 
@@ -41,13 +36,17 @@ using AuthProgress = Packet<net::tc::AUTH_PROGRESS, std::type_index>;
 using AuthOk       = Packet<net::tc::AUTH_OK,       std::string, u64, std::string, bool>;
 using AuthError    = Packet<net::tc::AUTH_ERROR,    std::type_index>;
 
+using PlayerData  = Packet<net::tc::PLAYER_DATA,  net::Cursor>; // self player data
+using UserUpdate  = Packet<net::tc::USER_UPDATE,  User::Id>;
 using PlayersShow = Packet<net::tc::SHOW_PLAYERS, std::vector<std::tuple<User::Id, net::Cursor>>>;
 using PlayersHide = Packet<net::tc::HIDE_PLAYERS, std::vector<Player::Id>>;
-using ClientData  = Packet<net::tc::CLIENT_DATA,  net::Cursor>;
 
 using WorldUpdate      = Packet<net::tc::WORLD_UPDATE,   std::vector<net::Cursor>, std::vector<net::Pixel>>;
+#pragma message("Change Player class to Cursor")
+//using ToolState        = Packet<net::tc::TOOL_STATE,     Player::Id, >
 using ChatMessage      = Packet<net::tc::CHAT_MESSAGE,   User::Id, std::string>;
 using ProtectionUpdate = Packet<net::tc::PROTECTION_UPD, Chunk::ProtPos, Chunk::ProtPos, u32>;
+using Stats            = Packet<net::tc::STATS,          u32, u32>;
 
 // Packet definitions, serverbound
 

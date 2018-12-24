@@ -59,6 +59,14 @@ World& WorldManager::getOrLoadWorld(std::string name) {
 	return sr->second;
 }
 
+void WorldManager::forEach(std::function<void(World&)> f) {
+	// this loop will crash if a world is unloaded while iterating
+	for (auto& world : worlds) {
+		f(world.second);
+	}
+}
+
+
 sz_t WorldManager::loadedWorlds() const {
 	return worlds.size();
 }

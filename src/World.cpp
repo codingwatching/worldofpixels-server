@@ -248,6 +248,14 @@ Chunk& World::getChunk(Chunk::Pos x, Chunk::Pos y) {
 	return search->second;
 }
 
+void World::sendUserUpdate(User& u) {
+	broadcast(UserUpdate(u.getId()));
+}
+
+void World::sendPlayerCountStats(u32 globalPlayerCount) {
+	broadcast(Stats(getPlayerCount(), globalPlayerCount));
+}
+
 // returns true if this function ended the request before returning
 bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request> req) {
 	if (!verifyChunkPos(x, y)) {

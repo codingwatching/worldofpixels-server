@@ -67,6 +67,8 @@ public:
 	static bool verifyChunkPos(Chunk::Pos x, Chunk::Pos y);
 	Chunk& getChunk(Chunk::Pos x, Chunk::Pos y);
 
+	void sendUserUpdate(User&);
+	void sendPlayerCountStats(u32 globalPlayerCount);
 	bool sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request>);
 	//void cancelChunkRequest(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request>);
 

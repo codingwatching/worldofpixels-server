@@ -36,7 +36,10 @@ public:
 
 	void addClient(Client&);
 	void delClient(Client&);
+	
+	void forEachClient(std::function<void(Client&)>);
 
+	void userWasUpdated(); // changed name, or any other property
 	void updateExpiryTime();
 	bool isExpired() const; // always false if !activeClients.empty()
 

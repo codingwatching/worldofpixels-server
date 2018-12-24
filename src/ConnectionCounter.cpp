@@ -11,12 +11,18 @@ ConnectionCounter::ConnectionCounter()
   currentActive(0),
   maxConnsPerIp(6) { }
 
-u8 ConnectionCounter::getMaxConnectionsPerIp() const {
-	return maxConnsPerIp;
-}
+u32 ConnectionCounter::getTotal()               const { return total; }
+u32 ConnectionCounter::getTotalChecked()        const { return totalChecked; }
+u32 ConnectionCounter::getCurrentActive()       const { return currentActive; }
+u32 ConnectionCounter::getCurrentChecking()     const { return currentChecking; }
+u8  ConnectionCounter::getMaxConnectionsPerIp() const { return maxConnsPerIp; }
 
 void ConnectionCounter::setMaxConnectionsPerIp(u8 value) {
 	maxConnsPerIp = value == 0 ? 1 : value;
+}
+
+void ConnectionCounter::setCounterUpdateFunc(std::function<void(ConnectionCounter&)> f) {
+	updatesFunc = std::move(f);
 }
 
 bool ConnectionCounter::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
@@ -35,6 +41,10 @@ bool ConnectionCounter::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
 void ConnectionCounter::connected(Client&) {
 	++totalChecked;
 	--currentChecking;
+	
+	if (updatesFunc) {
+		updatesFunc(*this);
+	}
 }
 
 void ConnectionCounter::disconnected(ClosedConnection& c) {
@@ -46,6 +56,10 @@ void ConnectionCounter::disconnected(ClosedConnection& c) {
 	auto search = connCountPerIp.find(c.ip);
 	if (--search->second == 0) { // guaranteed to exist and > 0
 		connCountPerIp.erase(search);
+	}
+	
+	if (updatesFunc) {
+		updatesFunc(*this);
 	}
 }
 

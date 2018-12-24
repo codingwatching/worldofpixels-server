@@ -16,6 +16,7 @@
 #include <misc/TimedCallbacks.hpp>
 #include <misc/AsyncHttp.hpp>
 #include <misc/TaskBuffer.hpp>
+#include <misc/AsyncPostgres.hpp>
 
 #include <uWS.h>
 
@@ -27,6 +28,7 @@ class Server {
 	// To stop the server from a signal handler, or other thread
 	std::unique_ptr<uS::Async, void (*)(uS::Async *)> stopCaller;
 
+	AsyncPostgres ap;
 	Storage s;
 	BansManager& bm;
 	TaskBuffer tb;
@@ -40,6 +42,7 @@ class Server {
 	ConnectionManager conn;
 
 	u32 saveTimer;
+	u32 statsTimer;
 
 public:
 	Server(std::string basePath = ".");

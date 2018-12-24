@@ -92,6 +92,7 @@ public:
 	std::string getModPass();
 	std::string getAdminPass();
 	std::string getBindAddress();
+
 	u16 getBindPort();
 
 	void setModPass(std::string);

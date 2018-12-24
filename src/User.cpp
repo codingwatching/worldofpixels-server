@@ -11,24 +11,66 @@
 
 User::User(User::Id uid)
 : uid(uid),
-  username("Guest"),
-  guest(true) { }
+  xpCount(0),
+  tokenCount(0),
+  followersCount(0),
+  followingCount(0),
+  friendCount(0),
+  username("Guest") { }
 
-User::User(User::Id uid, std::string s)
+User::User(User::Id uid, Xp xp, Tokens tok, u32 fers, u32 fing, u32 frnds, std::string u, std::string lw)
 : uid(uid),
-  username(std::move(s)),
-  guest(false) { }
+  xpCount(xp),
+  tokenCount(tok),
+  followersCount(fers),
+  followingCount(fing),
+  friendCount(frnds),
+  username(std::move(u)),
+  lastWorld(std::move(lw)) { }
 
-User::Id User::getId() const {
-	return uid;
+void User::addXp(Xp xp) {
+	xpCount += xp;
+	notifyUserUpdate();
 }
 
-const std::string& User::getUsername() const {
-	return username;
+void User::addTokens(Tokens toks) {
+	tokenCount += toks;
+	notifyUserUpdate();
 }
+
+bool User::remTokens(Tokens toks) {
+	if (tokenCount < toks) {
+		return false;
+	}
+
+	tokenCount -= toks;
+	notifyUserUpdate();
+
+	return true;
+}
+
+void User::setName(std::string name) {
+	username = std::move(name);
+	notifyUserUpdate();
+}
+
+void User::setLastWorld(std::string worldId) {
+	lastWorld = std::move(worldId);
+	notifyUserUpdate();
+}
+
+User::Id User::getId()         const { return uid; }
+User::Xp User::getXp()         const { return xpCount; }
+User::Tokens User::getTokens() const { return tokenCount; }
+u32 User::getFollowers()       const { return followersCount; }
+u32 User::getFollowing()       const { return followingCount; }
+u32 User::getFriends()         const { return friendCount; }
+
+const std::string& User::getUsername()  const { return username; }
+const std::string& User::getLastWorld() const { return lastWorld; }
 
 bool User::isGuest() const {
-	return guest;
+	return (uid & 0xFFFFFFFF00000000) == 0xFFFFFFFF00000000;
 }
 
 void User::addSession(Session& s) {
@@ -44,8 +86,31 @@ void User::delSession(Session& s) {
 	}
 }
 
+void User::forEachLinkedSession(std::function<void(Session&)> f) {
+	// copy the vector because the caller could invalidate the session or kick all of its users
+	// and that would remove an element from the linkedSessions vector, causing the iterator
+	// of the loop to become invalid, there's probably a faster way, but this is the safest.
+	std::vector<std::reference_wrapper<Session>> linkedSessionsCopy(linkedSessions);
+	for (auto session : linkedSessionsCopy) {
+		f(session);
+	}
+}
+
+void User::notifyUserUpdate() {
+	forEachLinkedSession([] (Session& s) {
+		s.userWasUpdated();
+	});
+}
+
 void to_json(nlohmann::json& j, const User& u) {
-	j["uid"] = n2hexstr(u.getId());
-	j["username"] = u.getUsername();
-	j["guest"] = u.isGuest();
+	j = {
+		{ "uid", n2hexstr(u.getId()) },
+		{ "xp", u.getXp() },
+		{ "tokens", u.getTokens() },
+		{ "followers", u.getFollowers() },
+		{ "following", u.getFollowing() },
+		{ "friends", u.getFriends() },
+		{ "username", u.getUsername() },
+		{ "guest",  u.isGuest() }
+	};
 }

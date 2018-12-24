@@ -2,6 +2,7 @@
 
 #include <map>
 #include <string>
+#include <functional>
 #include <chrono>
 
 #include <World.hpp>
@@ -34,6 +35,7 @@ public:
 	// should change World& for std::optional<World&> on c++17
 	bool isLoaded(const std::string&) const;
 	World& getOrLoadWorld(std::string);
+	void forEach(std::function<void(World&)>);
 
 	sz_t loadedWorlds() const;
 	bool saveAll();

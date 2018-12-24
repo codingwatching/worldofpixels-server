@@ -9,6 +9,7 @@
 
 #include <misc/optional.hpp>
 #include <misc/varints.hpp>
+#include <misc/templateutils.hpp>
 #include <misc/BufferHelper.hpp>
 #include <misc/utils.hpp>
 
@@ -16,46 +17,6 @@
 
 namespace pktdetail {
 #define BUFFER_ERROR std::length_error(std::string(__PRETTY_FUNCTION__) + ":" + std::to_string(__LINE__))
-
-template<typename... Types>
-struct are_all_arithmetic;
-
-template<>
-struct are_all_arithmetic<> : std::true_type {};
-
-template<typename T, typename... Types>
-struct are_all_arithmetic<T, Types...> : std::integral_constant<bool,
-	std::is_arithmetic<T>::value &&
-	are_all_arithmetic<Types...>::value> {};
-
-// Helper to determine whether there's a const_iterator for T.
-template<typename T>
-struct has_const_iterator {
-private:
-    template<typename C> static char test(typename C::const_iterator*);
-    template<typename C> static int  test(...);
-
-public:
-    enum { value = sizeof(test<T>(0)) == sizeof(char) };
-};
-
-template<typename>
-struct is_std_array : std::false_type {};
-
-template<typename T, std::size_t N>
-struct is_std_array<std::array<T, N>> : std::true_type {};
-
-template<typename>
-struct is_tuple : std::false_type {};
-
-template<typename... Ts>
-struct is_tuple<std::tuple<Ts...>> : std::true_type {};
-
-template<typename>
-struct is_optional : std::false_type {};
-
-template<typename T>
-struct is_optional<estd::optional<T>> : std::true_type {};
 
 //////////////////////////////
 // Forward declarations
@@ -151,20 +112,6 @@ typename std::enable_if<is_optional<OptionalValue>::value,
 readFromBuf(const u8 *& b, sz_t remaining);
 
 //////////////////////////////
-
-template<typename... Args>
-constexpr decltype(auto) add(Args&&... args) {
-	return (args + ... + 0);
-}
-
-template<typename>
-struct is_tuple_arithmetic : std::false_type {};
-
-template<typename... Ts>
-struct is_tuple_arithmetic<std::tuple<Ts...>> : are_all_arithmetic<Ts...> {
-	// member could be removed if value is false?
-	static constexpr sz_t size = add(sizeof(Ts)...);
-};
 
 template<typename N>
 typename std::enable_if<std::is_arithmetic<N>::value,

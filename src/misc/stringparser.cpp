@@ -33,10 +33,16 @@ fromString(const std::string& s) {
 template<typename T>
 typename std::enable_if<std::is_same<T, bool>::value, T>::type
 fromString(const std::string& s) {
-	if (s == "true") {
-		return true;
-	} else if (s == "false") {
-		return false;
+	if (s.size() != 0) {
+		switch(s[0]) {
+			case 't':
+			case 'T':
+				return true;
+				
+			case 'f':
+			case 'F':
+				return false;
+		}
 	}
 
 	throw std::invalid_argument("Invalid bool");

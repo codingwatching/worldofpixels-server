@@ -1,8 +1,10 @@
 #include "Session.hpp"
 
 #include <algorithm>
+#include <unordered_set>
 
 #include <User.hpp>
+#include <World.hpp>
 #include <Client.hpp>
 
 #include <nlohmann/json.hpp>
@@ -35,6 +37,24 @@ void Session::delClient(Client& c) {
 	if (it != activeClients.end()) {
 		activeClients.erase(it);
 	}
+}
+
+void Session::forEachClient(std::function<void(Client&)> f) {
+	// copy for the same reason as the one in User.cpp
+	std::vector<std::reference_wrapper<Client>> clientsCopy(activeClients);
+	for (auto client : clientsCopy) {
+		f(client);
+	}
+}
+
+void Session::userWasUpdated() {
+	std::unordered_set<World *> notifiedWorlds;
+	forEachClient([this, &notifiedWorlds] (Client& c) {
+		World * w = std::addressof(c.getPlayer().getWorld());
+		if (notifiedWorlds.emplace(w).second) { // if the world wasn't in the set
+			w->sendUserUpdate(*user);
+		}
+	});
 }
 
 void Session::updateExpiryTime() {

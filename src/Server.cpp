@@ -26,6 +26,7 @@ Server::Server(std::string basePath)
 : startupTime(std::chrono::steady_clock::now()),
   h(uWS::NO_DELAY, true, 16384),
   stopCaller(new uS::Async(h.getLoop()), asyncDeleter),
+  ap(h.getLoop()),
   s(std::move(basePath)),
   bm(s.getBansManager()),
   tb(h.getLoop()), // XXX: this should get destructed before other users of the taskbuffer, like WorldManager. what do?
@@ -37,7 +38,8 @@ Server::Server(std::string basePath)
   pr(h),
   //cmd(*this),
   conn(h, am, "OWOP"),
-  saveTimer(0) {
+  saveTimer(0),
+  statsTimer(0) {
 	std::cout << "Admin password set to: " << s.getAdminPass() << "." << std::endl;
 	std::cout << "Moderator password set to: " << s.getModPass() << "." << std::endl;
 
@@ -47,6 +49,52 @@ Server::Server(std::string basePath)
 	registerEndpoints();
 	registerPackets();
 
+	ap.setNotifyFunc([] (auto notif) {
+		std::cout << "[Postgre." << notif.bePid() << "/" << notif.channelName() << "]: " << notif.extra() << std::endl;
+	});
+
+	ap.connect();
+
+	// still not connected, however, you can query:
+	ap.query("DELETE FROM friends")
+	.then([] (auto r) {
+		if (!r) std::cout << "[FAIL] ";
+		std::cout << "Cleaned table friends" << std::endl;
+	});
+
+	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ('John', 18, true, 'Test description')")
+	.then([] (auto r) {
+		if (!r) std::cout << "[FAIL] ";
+		std::cout << "query 1 cb exec" << std::endl;
+	});
+
+	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ('Sarah', 17, false, 'Test description 2')")
+	.then([] (auto r) {
+		if (!r) std::cout << "[FAIL] ";
+		std::cout << "query 2 cb exec" << std::endl;
+	});
+
+	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ('Alex', 18, null, 'Test description 3')")
+	.then([] (auto r) {
+		if (!r) std::cout << "[FAIL] ";
+		std::cout << "query 3 cb exec" << std::endl;
+	});
+
+	ap.query("SELECT * FROM friends")
+	.then([] (auto r) {
+		if (!r) std::cout << "[FAIL] ";
+		std::cout << "query 4 cb exec" << std::endl;
+		if (!r) return;
+		for (AsyncPostgres::Result::Row row : r) { // can't auto, why???
+			auto v = row.get<std::string, int, estd::optional<bool>, std::string>();
+			std::cout << "-> " << std::get<0>(v) << "," << std::get<1>(v) << ",";
+			if (std::get<2>(v)) std::cout << *std::get<2>(v);
+			else std::cout << "null";
+			std::cout << "," << std::get<3>(v) << std::endl;
+		}
+	});
+
+
 	conn.addToBeg<ProxyChecker>(hcli, tc).setState(ProxyChecker::State::OFF);
 	conn.addToBeg<CaptchaChecker>(hcli).setState(CaptchaChecker::State::OFF);
 	conn.addToBeg<WorldChecker>(wm);
@@ -55,7 +103,20 @@ Server::Server(std::string basePath)
 		"https://ourworldofpixels.com",
 	});*/
 	conn.addToBeg<BanChecker>(bm);
-	conn.addToBeg<ConnectionCounter>();
+	conn.addToBeg<ConnectionCounter>().setCounterUpdateFunc([this] (ConnectionCounter& cc) {
+		if (statsTimer) { // if not 0
+			tc.resetTimer(statsTimer);
+		} else {
+			statsTimer = tc.startTimer([this, &cc] {
+				wm.forEach([count{cc.getCurrentActive()}] (World& w) {
+					w.sendPlayerCountStats(count);
+				});
+
+				statsTimer = 0;
+				return false;
+			}, 100);
+		}
+	});
 
 	conn.onSocketChecked([this] (IncomingConnection& ic) -> Client * {
 		World& w = wm.getOrLoadWorld(ic.ci.world);
@@ -136,6 +197,7 @@ void Server::unsafeStop() {
 		stopCaller = nullptr;
 		tc.clearTimers();
 		tb.prepareForDestruction();
+		ap.lazyDisconnect();
 	}
 }
 
