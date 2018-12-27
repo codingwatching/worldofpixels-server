@@ -62,21 +62,25 @@ Server::Server(std::string basePath)
 		std::cout << "Cleaned table friends" << std::endl;
 	});
 
-	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ('John', 18, true, 'Test description')")
+	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ($1, $2::int4, $3::bool, $4)", "John", 18, true, "Test description")
 	.then([] (auto r) {
 		if (!r) std::cout << "[FAIL] ";
 		std::cout << "query 1 cb exec" << std::endl;
 	});
 
-	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ('Sarah', 17, false, 'Test description 2')")
+	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ($1, $2::int4, $3::bool, $4)", "Sarah", 17, false, estd::nullopt)
 	.then([] (auto r) {
 		if (!r) std::cout << "[FAIL] ";
 		std::cout << "query 2 cb exec" << std::endl;
 	});
 
-	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ('Alex', 18, null, 'Test description 3')")
+	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ($1, $2::int4, $3::bool, $4)",
+			"Alex';--", 18, nullptr, "Test description 3")
 	.then([] (auto r) {
-		if (!r) std::cout << "[FAIL] ";
+		if (!r) {
+			std::cout << "[FAIL] ";
+		}
+
 		std::cout << "query 3 cb exec" << std::endl;
 	});
 
@@ -84,14 +88,12 @@ Server::Server(std::string basePath)
 	.then([] (auto r) {
 		if (!r) std::cout << "[FAIL] ";
 		std::cout << "query 4 cb exec" << std::endl;
-		if (!r) return;
-		for (AsyncPostgres::Result::Row row : r) { // can't auto, why???
-			auto v = row.get<std::string, int, estd::optional<bool>, std::string>();
-			std::cout << "-> " << std::get<0>(v) << "," << std::get<1>(v) << ",";
-			if (std::get<2>(v)) std::cout << *std::get<2>(v);
-			else std::cout << "null";
-			std::cout << "," << std::get<3>(v) << std::endl;
-		}
+
+		r.forEach([] (std::string name, int age, estd::optional<bool> m, estd::optional<std::string> desc) {
+			std::cout << "-> " << name << "," << age << ","
+				<< (m ? (*m?"1":"0") : "null") << ","
+				<< (desc ? *desc : std::string("null")) << std::endl;
+		});
 	});
 
 

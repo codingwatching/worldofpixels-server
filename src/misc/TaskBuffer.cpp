@@ -30,7 +30,7 @@ TaskBuffer::~TaskBuffer() {
 }
 
 void TaskBuffer::prepareForDestruction() {
-	// This funxtion is needed because else the event loop doesn't stop
+	// This function is needed because else the event loop doesn't stop
 	// when the server closes
 	executeMainThreadTasks();
 	execCaller = nullptr;

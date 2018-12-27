@@ -9,6 +9,7 @@
 
 #include <misc/fwd_uWS.h>
 #include <misc/explints.hpp>
+#include <misc/tuple.hpp>
 
 #include <postgresql/libpq-fe.h>
 
@@ -17,6 +18,8 @@ class PostgresSocket;
 class AsyncPostgres {
 public:
 	class Query;
+	template<typename... Ts>
+	class TemplatedQuery;
 	class Result;
 	class Notification;
 
@@ -25,7 +28,7 @@ private:
 	std::unique_ptr<uS::Async, void (*)(uS::Async *)> nextCommandCaller;
 	std::unique_ptr<PGconn, void (*)(PGconn *)> pgConn;
 	std::unique_ptr<PostgresSocket, void (*)(PostgresSocket *)> pSock;
-	std::deque<Query> queries;
+	std::deque<std::unique_ptr<Query>> queries;
 
 	std::function<void(Notification)> notifFunc;
 	bool stopOnceEmpty;
@@ -39,7 +42,8 @@ public:
 	void lazyDisconnect(); // will disconnect when the query queue is empty
 	void disconnect();
 
-	Query& query(std::string);
+	template<typename... Ts>
+	Query& query(std::string, Ts&&...);
 
 	bool isConnected() const;
 	ConnStatusType getStatus() const;
@@ -49,7 +53,6 @@ public:
 
 private:
 	void signalCompletion();
-	bool sendCommand(const std::string&);
 	void processNextCommand();
 	void currentCommandFinished(PGresult *);
 	void manageSocketEvents(bool);
@@ -66,17 +69,37 @@ private:
 class AsyncPostgres::Query {
 	std::string command;
 	std::function<void(Result)> onDone;
+	const char ** values;
+	const int * lengths;
+	const int * formats;
+	int nParams;
 
 public:
-	Query(std::string);
+	Query(std::string, const char **, const int *, const int *, int);
+	virtual ~Query();
 
 	void then(std::function<void(Result)>);
 	//void cancel();
 
 private:
+	int send(PGconn *);
 	void done(Result);
 
 	friend AsyncPostgres;
+};
+
+template<typename... Ts>
+class AsyncPostgres::TemplatedQuery : public AsyncPostgres::Query {
+	std::tuple<Ts...> valueStorage;
+	const char * realValues[sizeof... (Ts)];
+	const int realLengths[sizeof... (Ts)];
+	const int realFormats[sizeof... (Ts)];
+
+	template<std::size_t... Is>
+	TemplatedQuery(std::index_sequence<Is...>, std::string, Ts&&...);
+
+public:
+	TemplatedQuery(std::string, Ts&&...);
 };
 
 class AsyncPostgres::Result {
@@ -97,6 +120,9 @@ public:
 	iterator begin();
 	iterator end();
 
+	template<typename Func, typename Tuple = typename lambdaToTuple<Func>::type>
+	void forEach(Func);
+
 	Row operator[](int);
 	operator bool() const;
 
@@ -110,13 +136,16 @@ class AsyncPostgres::Result::Row {
 public:
 	Row(PGresult *, int);
 
-	template<typename Tuple, std::size_t... Is>
-	Tuple getImpl(std::index_sequence<Is...>);
-
 	template<typename... Ts>
 	std::tuple<Ts...> get();
 
 	int getRow();
+
+private:
+	template<typename Tuple, std::size_t... Is>
+	Tuple getImpl(std::index_sequence<Is...>);
+
+	friend AsyncPostgres::Result;
 };
 
 class AsyncPostgres::Result::iterator

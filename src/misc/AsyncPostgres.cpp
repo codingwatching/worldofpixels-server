@@ -162,17 +162,9 @@ void AsyncPostgres::lazyDisconnect() {
 void AsyncPostgres::disconnect() {
 	pSock = nullptr;
 	pgConn = nullptr;
-	nextCommandCaller = nullptr;
+	nextCommandCaller = nullptr; // !! not re-allocated if user connects again
 	busy = false;
 	stopOnceEmpty = false;
-}
-
-AsyncPostgres::Query& AsyncPostgres::query(std::string command) {
-	if (!busy) {
-		signalCompletion();
-	}
-
-	return *queries.emplace(queries.end(), std::move(command));
 }
 
 bool AsyncPostgres::isConnected() const {
@@ -195,14 +187,10 @@ void AsyncPostgres::signalCompletion() {
 	nextCommandCaller->send();
 }
 
-bool AsyncPostgres::sendCommand(const std::string& s) {
-	return PQsendQuery(pgConn.get(), s.c_str());
-}
-
 void AsyncPostgres::processNextCommand() {
 	if (!queries.empty()) {
 		busy = true;
-		if (!sendCommand(queries.front().command)) {
+		if (!queries.front()->send(pgConn.get())) {
 			printLastError();
 			// XXX: is this ok? maybe look at the error, reconnect and retry if necessary
 			currentCommandFinished(nullptr);
@@ -218,7 +206,7 @@ void AsyncPostgres::processNextCommand() {
 // won't work yet with multiple row cb
 void AsyncPostgres::currentCommandFinished(PGresult * r) {
 	// XXX: no check if empty, shouldn't happen anyways
-	queries.front().done(r);
+	queries.front()->done(r);
 	queries.pop_front();
 
 	signalCompletion();
@@ -282,12 +270,23 @@ void AsyncPostgres::nextCmdCallerCallback(uS::Async * a) {
 }
 
 
-AsyncPostgres::Query::Query(std::string cmd)
+AsyncPostgres::Query::Query(std::string cmd, const char ** vals, const int * lens, const int * fmts, int n)
 : command(std::move(cmd)),
-  onDone([] (AsyncPostgres::Result) {}) { }
+  onDone([] (AsyncPostgres::Result) {}),
+  values(vals),
+  lengths(lens),
+  formats(fmts),
+  nParams(n) { }
+
+AsyncPostgres::Query::~Query() { }
 
 void AsyncPostgres::Query::then(std::function<void(AsyncPostgres::Result)> f) {
 	onDone = std::move(f);
+}
+
+int AsyncPostgres::Query::send(PGconn * conn) {
+	return PQsendQueryParams(conn, command.c_str(), nParams,
+		nullptr, values, lengths, formats, 0);
 }
 
 void AsyncPostgres::Query::done(AsyncPostgres::Result r) {
@@ -298,8 +297,13 @@ void AsyncPostgres::Query::done(AsyncPostgres::Result r) {
 AsyncPostgres::Result::Result(PGresult * r)
 : pgResult(r, PQclear) { }
 
-sz_t AsyncPostgres::Result::size()    const { return PQntuples(pgResult.get()); }
-sz_t AsyncPostgres::Result::rowSize() const { return PQnfields(pgResult.get()); }
+sz_t AsyncPostgres::Result::size() const {
+	return pgResult ? PQntuples(pgResult.get()) : 0;
+}
+
+sz_t AsyncPostgres::Result::rowSize() const {
+	return pgResult ? PQnfields(pgResult.get()) : 0;
+}
 
 bool AsyncPostgres::Result::success() const {
 	if (!pgResult.get()) { return false; }
