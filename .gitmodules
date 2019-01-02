@@ -4,3 +4,6 @@
 [submodule "lib/json"]
 	path = lib/json
 	url = https://github.com/nlohmann/json
+[submodule "lib/naga-utils"]
+	path = lib/naga-utils
+	url = https://github.com/nagalun/naga-utils

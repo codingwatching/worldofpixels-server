@@ -21,12 +21,15 @@ CPPFLAGS += -MMD -MP
 
 UWS       = ./lib/uWebSockets
 JSON      = ./lib/json
-LIB_FILES = $(UWS)/libuWS.a
+NAGA      = ./lib/naga-utils
+LIB_FILES = $(UWS)/libuWS.a $(NAGA)/libnaga.a
 
 CPPFLAGS += -I ./src/
 CPPFLAGS += -I $(UWS)/src/
+CPPFLAGS += -I $(NAGA)/src/
 CPPFLAGS += -I $(JSON)/include/
 LDFLAGS  += -L $(UWS)/
+LDFLAGS  += -L $(NAGA)/
 
 LIBPNGLDL = $(shell libpng-config --ldflags)
 LDLIBS   += -lssl -lz -lcrypto -lcurl -lpthread -lpq $(LIBPNGLDL)
@@ -62,11 +65,14 @@ build/%.o: src/%.cpp
 $(UWS)/libuWS.a:
 	$(MAKE) -C $(UWS) -f ../uWebSockets.mk
 
+$(NAGA)/libnaga.a:
+	$(MAKE) -C $(NAGA)
 
 clean:
 	- $(RM) $(TARGET) $(OBJ_FILES) $(DEP_FILES)
 
 clean-all: clean
 	$(MAKE) -C $(UWS) -f ../uWebSockets.mk clean
+	$(MAKE) -C $(NAGA) clean
 
 -include $(DEP_FILES)

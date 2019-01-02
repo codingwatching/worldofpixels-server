@@ -35,8 +35,7 @@ Server::Server(std::string basePath)
   api(h, am),
   hcli(h.getLoop()),
   wm(tb, tc, s),
-  pr(h),
-  //cmd(*this),
+  pr(h, [] (Client& c) { c->updateLastActionTime(); }),
   conn(h, am, "OWOP"),
   saveTimer(0),
   statsTimer(0) {

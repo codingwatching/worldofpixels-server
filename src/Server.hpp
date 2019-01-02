@@ -5,13 +5,12 @@
 #include <memory>
 
 #include <ConnectionManager.hpp>
-//#include <CommandManager.hpp>
 #include <Storage.hpp>
 #include <WorldManager.hpp>
-#include <PacketReader.hpp>
 #include <ApiProcessor.hpp>
 #include <AuthManager.hpp>
 
+#include <misc/PacketReader.hpp>
 #include <misc/explints.hpp>
 #include <misc/TimedCallbacks.hpp>
 #include <misc/AsyncHttp.hpp>
@@ -21,6 +20,7 @@
 #include <uWS.h>
 
 class BansManager;
+class Client;
 
 class Server {
 	const std::chrono::steady_clock::time_point startupTime;
@@ -37,8 +37,7 @@ class Server {
 	ApiProcessor api;
 	AsyncHttp hcli;
 	WorldManager wm;
-	PacketReader pr;
-	//CommandManager cmd;
+	PacketReader<Client> pr;
 	ConnectionManager conn;
 
 	u32 saveTimer;
