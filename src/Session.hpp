@@ -5,10 +5,10 @@
 #include <chrono>
 #include <functional>
 
-#include <misc/explints.hpp>
-#include <misc/shared_ptr_ll.hpp>
-#include <misc/fwd_uWS.h>
-#include <misc/Ipv4.hpp>
+#include <explints.hpp>
+#include <shared_ptr_ll.hpp>
+#include <fwd_uWS.h>
+#include <Ipv4.hpp>
 
 #include <nlohmann/json_fwd.hpp>
 

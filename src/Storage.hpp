@@ -8,9 +8,9 @@
 #include <set>
 
 #include <BansManager.hpp>
-#include <misc/explints.hpp>
-#include <misc/PropertyReader.hpp>
-#include <misc/color.hpp>
+#include <explints.hpp>
+#include <PropertyReader.hpp>
+#include <color.hpp>
 
 class World;
 class Storage;

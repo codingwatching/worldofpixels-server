@@ -3,8 +3,8 @@
 #include <string>
 #include <map>
 
-#include <misc/Ipv4.hpp>
-#include <misc/explints.hpp>
+#include <Ipv4.hpp>
+#include <explints.hpp>
 
 #include <nlohmann/json_fwd.hpp>
 

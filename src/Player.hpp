@@ -2,9 +2,9 @@
 
 #include <string>
 
-#include <misc/explints.hpp>
-#include <misc/color.hpp>
-#include <misc/Bucket.hpp>
+#include <explints.hpp>
+#include <color.hpp>
+#include <Bucket.hpp>
 
 class World; // using World::Pos = i32;
 using WorldPos = i32;

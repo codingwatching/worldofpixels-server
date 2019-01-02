@@ -3,7 +3,7 @@
 #include <AuthManager.hpp>
 #include <Session.hpp>
 
-#include <misc/utils.hpp>
+#include <utils.hpp>
 
 #include <nlohmann/json.hpp>
 #include <uWS.h>

@@ -6,7 +6,7 @@
 #include <AuthManager.hpp>
 #include <Session.hpp>
 
-#include <misc/utils.hpp>
+#include <utils.hpp>
 
 #include <uWS.h>
 

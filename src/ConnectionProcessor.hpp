@@ -2,7 +2,7 @@
 
 #include <functional>
 
-#include <misc/fwd_uWS.h>
+#include <fwd_uWS.h>
 
 #include <nlohmann/json_fwd.hpp>
 

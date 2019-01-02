@@ -10,9 +10,9 @@
 #include <Session.hpp>
 #include <User.hpp>
 
-#include <misc/explints.hpp>
-#include <misc/shared_ptr_ll.hpp>
-#include <misc/fwd_uWS.h>
+#include <explints.hpp>
+#include <shared_ptr_ll.hpp>
+#include <fwd_uWS.h>
 
 namespace std {
 	template <>

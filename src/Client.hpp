@@ -2,9 +2,9 @@
 
 #include <chrono>
 
-#include <misc/fwd_uWS.h>
-#include <misc/explints.hpp>
-#include <misc/Ipv4.hpp>
+#include <fwd_uWS.h>
+#include <explints.hpp>
+#include <Ipv4.hpp>
 
 #include <Player.hpp>
 

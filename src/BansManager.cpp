@@ -5,7 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include <misc/utils.hpp>
+#include <utils.hpp>
 
 void to_json(nlohmann::json& j, const BanInfo& b) {
 	j = nlohmann::json({

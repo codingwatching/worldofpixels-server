@@ -2,8 +2,8 @@
 
 #include <uWS.h>
 
-#include <misc/utils.hpp>
-#include <misc/PrepMsg.hpp>
+#include <utils.hpp>
+#include <PrepMsg.hpp>
 
 #include <World.hpp>
 #include <Session.hpp>

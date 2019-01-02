@@ -10,12 +10,12 @@
 #include <ApiProcessor.hpp>
 #include <AuthManager.hpp>
 
-#include <misc/PacketReader.hpp>
-#include <misc/explints.hpp>
-#include <misc/TimedCallbacks.hpp>
-#include <misc/AsyncHttp.hpp>
-#include <misc/TaskBuffer.hpp>
-#include <misc/AsyncPostgres.hpp>
+#include <PacketReader.hpp>
+#include <explints.hpp>
+#include <TimedCallbacks.hpp>
+#include <AsyncHttp.hpp>
+#include <TaskBuffer.hpp>
+#include <AsyncPostgres.hpp>
 
 #include <uWS.h>
 

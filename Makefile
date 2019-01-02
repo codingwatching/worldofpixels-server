@@ -10,11 +10,11 @@ TARGET    = out
 OPT_REL   = -O2
 LD_REL    = -s
 
-OPT_UDBG  = -Og -g
-LD_UDBG   =
+OPT_DBG  = -Og -g
+LD_DBG   =
 
-OPT_DBG   = -Og -g -fsanitize=address
-LD_DBG    = -fsanitize=address
+OPT_UDBG   = -Og -g -fsanitize=address
+LD_UDBG    = -fsanitize=address
 
 CPPFLAGS += -std=c++17
 CPPFLAGS += -MMD -MP
@@ -22,7 +22,7 @@ CPPFLAGS += -MMD -MP
 UWS       = ./lib/uWebSockets
 JSON      = ./lib/json
 NAGA      = ./lib/naga-utils
-LIB_FILES = $(UWS)/libuWS.a $(NAGA)/libnaga.a
+LIB_FILES = $(NAGA)/libnaga.a $(UWS)/libuWS.a
 
 CPPFLAGS += -I ./src/
 CPPFLAGS += -I $(UWS)/src/
@@ -40,12 +40,12 @@ endif
 
 .PHONY: all rel udbg dirs clean clean-all
 
-all: CPPFLAGS += $(OPT_UDBG)
-all: LDFLAGS += $(LD_UDBG)
+all: CPPFLAGS += $(OPT_DBG)
+all: LDFLAGS += $(LD_DBG)
 all: dirs $(TARGET)
 
-udbg: CPPFLAGS += $(OPT_DBG)
-udbg: LDFLAGS  += $(LD_DBG)
+udbg: CPPFLAGS += $(OPT_UDBG)
+udbg: LDFLAGS  += $(LD_UDBG)
 udbg: dirs $(TARGET)
 
 rel: CPPFLAGS += $(OPT_REL)
@@ -56,7 +56,7 @@ $(TARGET): $(OBJ_FILES) $(LIB_FILES)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 dirs:
-	mkdir -p build/misc
+	mkdir -p build
 
 build/%.o: src/%.cpp
 	$(CXX) $(CPPFLAGS) -c -o $@ $<

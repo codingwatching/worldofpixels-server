@@ -7,9 +7,9 @@
 #include <Player.hpp>
 #include <World.hpp>
 
-#include <misc/shared_ptr_ll.hpp>
-#include <misc/utils.hpp>
-#include <misc/base64.hpp>
+#include <shared_ptr_ll.hpp>
+#include <utils.hpp>
+#include <base64.hpp>
 
 #include <nlohmann/json.hpp>
 

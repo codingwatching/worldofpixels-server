@@ -3,10 +3,10 @@
 #include <iostream>
 #include <algorithm>
 
-#include <misc/base64.hpp>
-#include <misc/utils.hpp>
-#include <misc/BufferHelper.hpp>
-#include <misc/TimedCallbacks.hpp>
+#include <base64.hpp>
+#include <utils.hpp>
+#include <BufferHelper.hpp>
+#include <TimedCallbacks.hpp>
 
 AuthManager::AuthManager(TimedCallbacks& tc)
 : tc(tc),

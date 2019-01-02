@@ -5,8 +5,8 @@
 #include <chrono>
 #include <map>
 
-#include <misc/explints.hpp>
-#include <misc/Ipv4.hpp>
+#include <explints.hpp>
+#include <Ipv4.hpp>
 
 class AsyncHttp;
 class TimedCallbacks;

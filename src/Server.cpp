@@ -35,7 +35,7 @@ Server::Server(std::string basePath)
   api(h, am),
   hcli(h.getLoop()),
   wm(tb, tc, s),
-  pr(h, [] (Client& c) { c->updateLastActionTime(); }),
+  pr(h, [] (Client& c) { c.updateLastActionTime(); }), // for every packet
   conn(h, am, "OWOP"),
   saveTimer(0),
   statsTimer(0) {
@@ -94,7 +94,6 @@ Server::Server(std::string basePath)
 				<< (desc ? *desc : std::string("null")) << std::endl;
 		});
 	});
-
 
 	conn.addToBeg<ProxyChecker>(hcli, tc).setState(ProxyChecker::State::OFF);
 	conn.addToBeg<CaptchaChecker>(hcli).setState(CaptchaChecker::State::OFF);

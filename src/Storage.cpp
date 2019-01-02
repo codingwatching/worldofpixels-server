@@ -12,10 +12,10 @@
 
 #include <Chunk.hpp>
 
-#include <misc/PngImage.hpp>
-#include <misc/rle.hpp>
-#include <misc/BufferHelper.hpp>
-#include <misc/utils.hpp>
+#include <PngImage.hpp>
+#include <rle.hpp>
+#include <BufferHelper.hpp>
+#include <utils.hpp>
 
 bool operator<(const twoi32& a, const twoi32& b) {
 	return a.pos < b.pos;

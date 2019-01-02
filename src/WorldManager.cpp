@@ -3,8 +3,8 @@
 #include <iostream>
 #include <utility>
 #include <Storage.hpp>
-//#include <misc/TaskBuffer.hpp>
-#include <misc/TimedCallbacks.hpp>
+//#include <TaskBuffer.hpp>
+#include <TimedCallbacks.hpp>
 
 WorldManager::WorldManager(TaskBuffer& tb, TimedCallbacks& tc, Storage& s)
 : tb(tb),

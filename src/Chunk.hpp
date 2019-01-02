@@ -7,10 +7,10 @@
 #include <shared_mutex>
 #include <bitset>
 
-#include <misc/explints.hpp>
-#include <misc/color.hpp>
-#include <misc/PngImage.hpp>
-#include <misc/utils.hpp>
+#include <explints.hpp>
+#include <color.hpp>
+#include <PngImage.hpp>
+#include <utils.hpp>
 
 class WorldStorage;
 

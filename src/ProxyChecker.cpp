@@ -4,9 +4,9 @@
 #include <Session.hpp>
 #include <keys.hpp>
 
-#include <misc/AsyncHttp.hpp>
-#include <misc/TimedCallbacks.hpp>
-#include <misc/utils.hpp>
+#include <AsyncHttp.hpp>
+#include <TimedCallbacks.hpp>
+#include <utils.hpp>
 
 #include <iostream>
 

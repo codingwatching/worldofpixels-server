@@ -1,5 +1,5 @@
 #include <nlohmann/json.hpp>
-#include <misc/stringparser.hpp>
+#include <stringparser.hpp>
 
 template<typename Func>
 void ApiProcessor::TemplatedEndpointBuilder::onOutsider(bool exclusive, Func f) {

@@ -9,10 +9,10 @@
 
 #include <AuthManager.hpp>
 
-#include <misc/explints.hpp>
-#include <misc/fwd_uWS.h>
-#include <misc/shared_ptr_ll.hpp>
-#include <misc/tuple.hpp>
+#include <explints.hpp>
+#include <fwd_uWS.h>
+#include <shared_ptr_ll.hpp>
+#include <tuple.hpp>
 
 #include <nlohmann/json_fwd.hpp>
 

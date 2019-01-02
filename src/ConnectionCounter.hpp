@@ -6,8 +6,8 @@
 #include <string>
 #include <functional>
 
-#include <misc/Ipv4.hpp>
-#include <misc/explints.hpp>
+#include <Ipv4.hpp>
+#include <explints.hpp>
 
 class ConnectionCounter : public ConnectionProcessor {
 	u32 total;

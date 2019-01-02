@@ -5,8 +5,8 @@
 #include <fstream>
 #include <cstdio> // std::remove
 
-#include <misc/rle.hpp>
-#include <misc/utils.hpp>
+#include <rle.hpp>
+#include <utils.hpp>
 #include <Storage.hpp>
 
 static_assert((Chunk::size & (Chunk::size - 1)) == 0,

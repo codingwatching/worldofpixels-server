@@ -6,10 +6,10 @@
 #include <User.hpp>
 #include <types.hpp>
 
-#include <misc/color.hpp>
-#include <misc/explints.hpp>
-#include <misc/IdSys.hpp>
-#include <misc/shared_ptr_ll.hpp>
+#include <color.hpp>
+#include <explints.hpp>
+#include <IdSys.hpp>
+#include <shared_ptr_ll.hpp>
 
 #include <string>
 #include <set>
