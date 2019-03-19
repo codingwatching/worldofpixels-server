@@ -26,17 +26,17 @@ Server::Server(std::string basePath)
 : startupTime(std::chrono::steady_clock::now()),
   h(uWS::NO_DELAY, true, 16384),
   stopCaller(new uS::Async(h.getLoop()), asyncDeleter),
-  ap(h.getLoop()),
   s(std::move(basePath)),
   bm(s.getBansManager()),
   tb(h.getLoop()), // XXX: this should get destructed before other users of the taskbuffer, like WorldManager. what do?
   tc(h.getLoop()),
   am(tc),
+  wm(tb, tc, s),
+  conn(h, am, "OWOP"),
   api(h, am),
   hcli(h.getLoop()),
-  wm(tb, tc, s),
+  ap(h.getLoop(), tc),
   pr(h, [] (Client& c) { c.updateLastActionTime(); }), // for every packet
-  conn(h, am, "OWOP"),
   saveTimer(0),
   statsTimer(0) {
 	std::cout << "Admin password set to: " << s.getAdminPass() << "." << std::endl;
@@ -48,8 +48,25 @@ Server::Server(std::string basePath)
 	registerEndpoints();
 	registerPackets();
 
-	ap.setNotifyFunc([] (auto notif) {
+	ap.onNotification([] (auto notif) {
 		std::cout << "[Postgre." << notif.bePid() << "/" << notif.channelName() << "]: " << notif.extra() << std::endl;
+	});
+
+	ap.onConnectionStateChange([this] (auto state) {
+		switch (state) {
+			case CONNECTION_OK:
+				std::cout << "Connected to DB!" << std::endl;
+				ap.query<true>("LISTEN uv_ban")
+				.then([] (auto r) {
+					if (!r) std::cout << "[FAIL] ";
+					std::cout << "Listening to uv_ban notifs" << std::endl;
+				});
+				break;
+
+			case CONNECTION_BAD:
+				std::cout << "Disconnected from DB!" << std::endl;
+				break;
+		}
 	});
 
 	ap.connect();
@@ -67,7 +84,7 @@ Server::Server(std::string basePath)
 		std::cout << "query 1 cb exec" << std::endl;
 	});
 
-	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ($1, $2::int4, $3::bool, $4)", "Sarah", 17, false, estd::nullopt)
+	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ($1, $2::int4, $3::bool, $4)", "Sarah", 17, false, std::nullopt)
 	.then([] (auto r) {
 		if (!r) std::cout << "[FAIL] ";
 		std::cout << "query 2 cb exec" << std::endl;
@@ -88,7 +105,7 @@ Server::Server(std::string basePath)
 		if (!r) std::cout << "[FAIL] ";
 		std::cout << "query 4 cb exec" << std::endl;
 
-		r.forEach([] (std::string name, int age, estd::optional<bool> m, estd::optional<std::string> desc) {
+		r.forEach([] (std::string name, int age, std::optional<bool> m, std::optional<std::string> desc) {
 			std::cout << "-> " << name << "," << age << ","
 				<< (m ? (*m?"1":"0") : "null") << ","
 				<< (desc ? *desc : std::string("null")) << std::endl;
@@ -99,7 +116,6 @@ Server::Server(std::string basePath)
 	conn.addToBeg<CaptchaChecker>(hcli).setState(CaptchaChecker::State::OFF);
 	conn.addToBeg<WorldChecker>(wm);
 	/*conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>{
-		"http://ourworldofpixels.com",
 		"https://ourworldofpixels.com",
 	});*/
 	conn.addToBeg<BanChecker>(bm);

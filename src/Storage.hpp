@@ -8,6 +8,7 @@
 #include <set>
 
 #include <BansManager.hpp>
+
 #include <explints.hpp>
 #include <PropertyReader.hpp>
 #include <color.hpp>

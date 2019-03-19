@@ -69,7 +69,7 @@ bool ProxyChecker::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
 }
 
 void ProxyChecker::asyncCheck(IncomingConnection& ic, std::function<void(bool)> cb) {
-	hcli.addRequest("http://proxycheck.io/v2/" + ic.ip.toString(), {
+	hcli.addRequest(std::string("http://proxycheck.io/v2/").append(ic.ip.toString()), {
 		{"key", PROXY_API_KEY},
 	}, [this, &ic, end{std::move(cb)}] (auto res) {
 		if (!res.successful) {

@@ -8,7 +8,7 @@
 #include <explints.hpp>
 #include <shared_ptr_ll.hpp>
 #include <fwd_uWS.h>
-#include <Ipv4.hpp>
+#include <Ip.hpp>
 
 #include <nlohmann/json_fwd.hpp>
 
@@ -23,7 +23,7 @@ class Session {
 	std::chrono::minutes maxInactivity;
 
 	// This could be stored somewhere else, where RAM won't be wasted
-	Ipv4 creatorIp;
+	Ip creatorIp;
 	std::string creatorUa;
 	std::string creatorLang;
 
@@ -31,7 +31,7 @@ class Session {
 	std::chrono::system_clock::time_point expires;
 
 public:
-	Session(ll::shared_ptr<User>, Ipv4, std::string ua, std::string lang, std::chrono::minutes maxInactivity);
+	Session(ll::shared_ptr<User>, Ip, std::string ua, std::string lang, std::chrono::minutes maxInactivity);
 	~Session();
 
 	void addClient(Client&);
@@ -46,7 +46,7 @@ public:
 	User& getUser() const;
 	std::chrono::system_clock::time_point getCreationTime() const;
 	std::chrono::system_clock::time_point getExpiryTime() const;
-	Ipv4 getCreatorIp() const;
+	Ip getCreatorIp() const;
 	const std::string& getCreatorUserAgent() const;
 	const std::string& getPreferredLanguage() const;
 };

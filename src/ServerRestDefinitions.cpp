@@ -54,7 +54,7 @@ void Server::registerEndpoints() {
 			ua = h.toString();
 		}
 
-		Ipv4 ip(req->getIp()); // done here because the move invalidates ref before calling getIp
+		Ip ip(req->getIp()); // done here because the move invalidates ref before calling getIp
 		am.createGuestSession(ip, std::move(ua), std::move(lang), [req{std::move(req)}] (auto token, Session& s) {
 			if (!req->isCancelled()) {
 				std::string b64tok(base64Encode(token.data(), token.size()));
@@ -321,7 +321,7 @@ void Server::registerEndpoints() {
 	api.on(ApiProcessor::MGET)
 		.path("status")
 	.onOutsider(false, [this] (ll::shared_ptr<Request> req, nlohmann::json) {
-		Ipv4 ip(req->getIp());
+		Ip ip(req->getIp());
 
 		bool banned = bm.isBanned(ip);
 

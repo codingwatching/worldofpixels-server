@@ -11,7 +11,7 @@
 
 #pragma message("TODO: Think if HTTP requests need to prevent session expires")
 
-Session::Session(ll::shared_ptr<User> usr, Ipv4 ip, std::string ua, std::string lang, std::chrono::minutes maxInactivity)
+Session::Session(ll::shared_ptr<User> usr, Ip ip, std::string ua, std::string lang, std::chrono::minutes maxInactivity)
 : user(std::move(usr)),
   maxInactivity(std::move(maxInactivity)),
   creatorIp(ip),
@@ -77,7 +77,7 @@ std::chrono::system_clock::time_point Session::getExpiryTime() const {
 	return expires;
 }
 
-Ipv4 Session::getCreatorIp() const {
+Ip Session::getCreatorIp() const {
 	return creatorIp;
 }
 

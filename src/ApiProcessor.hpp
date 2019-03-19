@@ -9,6 +9,7 @@
 
 #include <AuthManager.hpp>
 
+#include <Ip.hpp>
 #include <explints.hpp>
 #include <fwd_uWS.h>
 #include <shared_ptr_ll.hpp>
@@ -71,13 +72,13 @@ class Request {
 
 	uWS::HttpResponse * res;
 	uWS::HttpRequest * req;
-	Ipv4 ip;
+	Ip ip;
 	bool isProxied; // aka request went through nginx
 
 public:
 	Request(uWS::HttpResponse *, uWS::HttpRequest *);
 
-	Ipv4 getIp() const;
+	Ip getIp() const;
 	uWS::HttpResponse * getResponse();
 	uWS::HttpRequest * getData();
 

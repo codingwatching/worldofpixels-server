@@ -6,4 +6,4 @@
 	url = https://github.com/nlohmann/json
 [submodule "lib/naga-utils"]
 	path = lib/naga-utils
-	url = https://github.com/nagalun/naga-utils
+	url = /home/eldit/workspace/naga-utils/

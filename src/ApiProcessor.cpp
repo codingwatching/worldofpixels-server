@@ -153,12 +153,19 @@ Request::Request(uWS::HttpResponse * res, uWS::HttpRequest * req)
 : cancelHandler(nullptr),
   res(res),
   req(req),
-  ip(res->getHttpSocket()->getAddress().address),
-  isProxied(ip.isLocal()) {
+  isProxied(false) {
+  	auto addr = res->getHttpSocket()->getAddress();
+  	if (addr.family[0] == 'U') {
+  		isProxied = true;
+  	} else {
+  		ip = Ip(addr.address);
+  		isProxied = ip.isLocal();
+  	}
+
 	maybeUpdateIp();
 }
 
-Ipv4 Request::getIp() const {
+Ip Request::getIp() const {
 	return ip;
 }
 
@@ -259,7 +266,7 @@ void Request::invalidateData() {
 void Request::maybeUpdateIp() {
 	if (isProxied) {
 		if (uWS::Header realIp = req->getHeader("x-real-ip", 9)) {
-			ip = Ipv4(realIp.value);
+			ip = Ip(realIp.value);
 		}
 	}
 }

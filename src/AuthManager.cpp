@@ -58,7 +58,7 @@ Session * AuthManager::getSession(const std::string& b64str) {
 	return getSession(b64str.data(), b64str.size());
 }
 
-void AuthManager::createGuestSession(Ipv4 ip, std::string ua, std::string lang,
+void AuthManager::createGuestSession(Ip ip, std::string ua, std::string lang,
 		std::function<void(std::array<u8, 16>, Session&)> cb) {
 	auto token(createGuestToken(ip));
 	auto search = sessions.find(token);
@@ -131,12 +131,12 @@ std::array<u8, 16> AuthManager::createRandomToken() {
 	return arr;
 }
 
-std::array<u8, 16> AuthManager::createGuestToken(Ipv4 ip) {
-	static_assert(sizeof(decltype(Ipv4().get())) == 4);
+std::array<u8, 16> AuthManager::createGuestToken(Ip ip) {
+	static_assert(sizeof(decltype(Ip().get4())) == 4);
 
 	std::array<u8, 16> arr;
 	auto it = std::copy(guestSalt.begin(), guestSalt.end(), arr.begin());
-	buf::writeLE(&*it, ip.get());
+	buf::writeLE(&*it, ip.get4());
 
 	return arr;
 }

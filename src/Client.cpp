@@ -8,7 +8,7 @@
 #include <World.hpp>
 #include <Session.hpp>
 
-Client::Client(uWS::WebSocket<uWS::SERVER> * ws, Session& s, Ipv4 ip, Player::Builder& pb)
+Client::Client(uWS::WebSocket<uWS::SERVER> * ws, Session& s, Ip ip, Player::Builder& pb)
 : ws(ws),
   session(s),
   lastAction(std::chrono::steady_clock::now()),
@@ -33,7 +33,7 @@ std::chrono::steady_clock::time_point Client::getLastActionTime() const {
 	return lastAction;
 }
 
-Ipv4 Client::getIp() const {
+Ip Client::getIp() const {
 	return ip;
 }
 

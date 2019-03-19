@@ -59,7 +59,7 @@ bool CaptchaChecker::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
 void CaptchaChecker::asyncCheck(IncomingConnection& ic, std::function<void(bool)> cb) {
 	hcli.addRequest("https://www.google.com/recaptcha/api/siteverify", {
 		{"secret", CAPTCHA_API_KEY},
-		{"remoteip", ic.ip.toString()},
+		{"remoteip", ic.ip.toString().data()}, // XXX: fix when json lib supports string views
 		{"response", ic.args.at("captcha")}
 	}, [&ic, end{std::move(cb)}] (auto res) {
 		if (!res.successful) {

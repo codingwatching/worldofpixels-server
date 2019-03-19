@@ -9,7 +9,7 @@
 
 #include <explints.hpp>
 #include <fwd_uWS.h>
-#include <Ipv4.hpp>
+#include <Ip.hpp>
 
 #include <User.hpp>
 
@@ -20,7 +20,7 @@ class AuthManager;
 
 struct ClosedConnection {
 	uWS::WebSocket<true> * const ws;
-	const Ipv4 ip;
+	const Ip ip;
 	const bool wasClient;
 
 	ClosedConnection(Client&);
@@ -38,7 +38,7 @@ struct IncomingConnection {
 	std::map<std::string, std::string> args;
 	std::forward_list<std::unique_ptr<ConnectionProcessor>>::iterator nextProcessor;
 	std::list<IncomingConnection>::iterator it; // own position in list
-	Ipv4 ip;
+	Ip ip;
 	bool cancelled;
 };
 
@@ -66,7 +66,7 @@ public:
 	void forEachClient(std::function<void(Client&)>);
 
 private:
-	void handleIncoming(uWS::WebSocket<true> *, Session&, std::map<std::string, std::string>, uWS::HttpRequest, Ipv4);
+	void handleIncoming(uWS::WebSocket<true> *, Session&, std::map<std::string, std::string>, uWS::HttpRequest, Ip);
 	void handleAsync(IncomingConnection&);
 	void handleFail(IncomingConnection&);
 	void handleEnd(IncomingConnection&);

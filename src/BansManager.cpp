@@ -34,7 +34,7 @@ void BansManager::readBanlist() { // XXX: no exception handling
 		std::ifstream in(bansFilePath);
 		nlohmann::json j;
 		in >> j;
-		bans = j.get<std::map<Ipv4, BanInfo>>();
+		bans = j.get<std::map<Ip, BanInfo>>();
 		bansChanged = false;
 	}
 }
@@ -64,22 +64,22 @@ void BansManager::resetBanlist() {
 	bans.clear();
 }
 
-bool BansManager::isBanned(Ipv4 ip) {
+bool BansManager::isBanned(Ip ip) {
 	clearExpiredBans();
 	return bans.count(ip) != 0;
 }
 
-const BanInfo& BansManager::getInfoFor(Ipv4 ip) {
+const BanInfo& BansManager::getInfoFor(Ip ip) {
 	return bans.at(ip);
 }
 
-void BansManager::ban(Ipv4 ip, u64 seconds, std::string reason) {
+void BansManager::ban(Ip ip, u64 seconds, std::string reason) {
 	i64 timestamp = seconds > 0 ? jsDateNow() + seconds * 10000 : 0;
 	bans[ip] = {timestamp, std::move(reason)};
 	bansChanged = true;
 }
 
-bool BansManager::unban(Ipv4 ip) {
+bool BansManager::unban(Ip ip) {
 	bool useful = bans.erase(ip);
 	if (useful) {
 		bansChanged = true;

@@ -51,10 +51,10 @@ public:
 	Session * getSession(const char *, sz_t);
 	Session * getSession(const std::string&);
 
-	void createGuestSession(Ipv4, std::string ua, std::string lang,
+	void createGuestSession(Ip, std::string ua, std::string lang,
 		std::function<void(std::array<u8, 16>, Session&)>);
 
-	void createGoogleSession(Ipv4, std::string ua, std::string lang,
+	void createGoogleSession(Ip, std::string ua, std::string lang,
 		std::string gtoken, std::function<void(std::array<u8, 16>, Session&)>);
 
 	void forEachSession(std::function<void(const std::array<u8, 16>&, const Session&)>);
@@ -63,7 +63,7 @@ private:
 	bool updateTimer();
 
 	static std::array<u8, 16> createRandomToken();
-	std::array<u8, 16> createGuestToken(Ipv4);
+	std::array<u8, 16> createGuestToken(Ip);
 
 	u64 generateGuestUserId();
 };

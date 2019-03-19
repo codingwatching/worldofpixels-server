@@ -4,7 +4,7 @@
 
 #include <fwd_uWS.h>
 #include <explints.hpp>
-#include <Ipv4.hpp>
+#include <Ip.hpp>
 
 #include <Player.hpp>
 
@@ -16,18 +16,18 @@ class Client { // 95 b
 	uWS::WebSocket<true> * const ws;
 	Session& session;
 	std::chrono::steady_clock::time_point lastAction;
-	Ipv4 ip;
+	Ip ip;
 	Player pl;
 
 public:
-	Client(uWS::WebSocket<true> *, Session&, Ipv4, Player::Builder&);
+	Client(uWS::WebSocket<true> *, Session&, Ip, Player::Builder&);
 	~Client();
 
 	void updateLastActionTime();
 
 	bool inactiveKickEnabled() const;
 	std::chrono::steady_clock::time_point getLastActionTime() const;
-	Ipv4 getIp() const;
+	Ip getIp() const;
 	uWS::WebSocket<true> * getWs();
 	Session& getSession();
 	Player& getPlayer();

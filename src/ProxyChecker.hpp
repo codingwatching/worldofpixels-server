@@ -6,7 +6,7 @@
 #include <map>
 
 #include <explints.hpp>
-#include <Ipv4.hpp>
+#include <Ip.hpp>
 
 class AsyncHttp;
 class TimedCallbacks;
@@ -20,7 +20,7 @@ private:
 
 	AsyncHttp& hcli;
 	State state;
-	std::map<Ipv4, Info> cache;
+	std::map<Ip, Info> cache;
 
 public:
 	ProxyChecker(AsyncHttp&, TimedCallbacks&);

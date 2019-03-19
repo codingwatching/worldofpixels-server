@@ -56,11 +56,23 @@ ConnectionManager::ConnectionManager(uWS::Hub& h, AuthManager& a, std::string pr
 			}
 		}
 
-		auto addr = ws->getAddress();
 		auto search = argList.find("token");
 		if (search == argList.end()) {
 			ws->close(4000);
 			return;
+		}
+
+		auto addr = ws->getAddress();
+		Ip ip;
+		if (addr.family[0] == 'U' || Ip(addr.address).isLocal()) { // inefficient if using tcp
+			if (auto h = req.getHeader("x-real-ip", 9)) {
+				ip = Ip(h.toString());
+			} else {
+				ws->close(4002);
+				return;
+			}
+		} else {
+			ip = Ip(addr.address);
 		}
 
 		if (Session * sess = am.getSession(search->second)) {
@@ -109,7 +121,7 @@ void ConnectionManager::forEachProcessor(std::function<void(ConnectionProcessor&
 }
 
 void ConnectionManager::handleIncoming(uWS::WebSocket<uWS::SERVER> * ws, Session& session,
-		std::map<std::string, std::string> args, uWS::HttpRequest req, Ipv4 ip) {
+		std::map<std::string, std::string> args, uWS::HttpRequest req, Ip ip) {
 	// can be optimized
 	pending.push_front({ConnectionInfo(), session,  ws, std::move(args), processors.begin(), pending.end(), ip, false});
 	auto ic = pending.begin();
