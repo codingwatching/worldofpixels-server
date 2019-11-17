@@ -2,13 +2,12 @@
 
 #include <functional>
 
-#include <fwd_uWS.h>
-
 #include <nlohmann/json_fwd.hpp>
 
 struct IncomingConnection;
 struct ClosedConnection;
 class Client;
+class HttpData;
 
 class ConnectionProcessor {
 public:
@@ -16,7 +15,7 @@ public:
 
 	virtual bool isAsync(IncomingConnection&);
 
-	virtual bool preCheck(IncomingConnection&, uWS::HttpRequest&);
+	virtual bool preCheck(IncomingConnection&, HttpData);
 	virtual void asyncCheck(IncomingConnection&, std::function<void(bool)> cb);
 	virtual bool endCheck(IncomingConnection&);
 

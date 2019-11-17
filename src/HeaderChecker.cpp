@@ -3,15 +3,14 @@
 #include <algorithm>
 
 #include <ConnectionManager.hpp>
-
-#include <uWS.h>
+#include <HttpData.hpp>
 
 HeaderChecker::HeaderChecker(std::vector<std::string> v)
 : acceptedOrigins(std::move(v)) { }
 
-bool HeaderChecker::preCheck(IncomingConnection& ic, uWS::HttpRequest& req) {
-	uWS::Header o = req.getHeader("origin", 6);
-	if (!o || std::find(acceptedOrigins.begin(), acceptedOrigins.end(), o.toString()) == acceptedOrigins.end()) {
+bool HeaderChecker::preCheck(IncomingConnection& ic, HttpData hd) {
+	auto o = hd.getHeader("origin");
+	if (!o || std::find(acceptedOrigins.begin(), acceptedOrigins.end(), *o) == acceptedOrigins.end()) {
 		return false;
 	}
 

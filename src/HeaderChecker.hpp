@@ -10,5 +10,5 @@ class HeaderChecker : public ConnectionProcessor {
 
 public:
 	HeaderChecker(std::vector<std::string>);
-	bool preCheck(IncomingConnection&, uWS::HttpRequest&);
+	bool preCheck(IncomingConnection&, HttpData);
 };

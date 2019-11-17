@@ -10,5 +10,5 @@ class BanChecker : public ConnectionProcessor {
 public:
 	BanChecker(BansManager&);
 
-	bool preCheck(IncomingConnection&, uWS::HttpRequest&);
+	bool preCheck(IncomingConnection&, HttpData);
 };

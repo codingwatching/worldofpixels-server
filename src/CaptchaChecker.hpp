@@ -2,18 +2,18 @@
 
 #include "ConnectionProcessor.hpp"
 
-class AsyncHttp;
+class RecaptchaRestApi;
 
 class CaptchaChecker : public ConnectionProcessor {
 public:
 	enum class State { ALL, GUESTS, OFF };
 
 private:
-	AsyncHttp& hcli;
+	RecaptchaRestApi& rcra;
 	State state;
 
 public:
-	CaptchaChecker(AsyncHttp&);
+	CaptchaChecker(RecaptchaRestApi&);
 
 	void setState(State);
 
@@ -21,7 +21,7 @@ public:
 
 	bool isAsync(IncomingConnection&);
 
-	bool preCheck(IncomingConnection&, uWS::HttpRequest&);
+	bool preCheck(IncomingConnection&, HttpData);
 	void asyncCheck(IncomingConnection&, std::function<void(bool)>);
 
 	nlohmann::json getPublicInfo();

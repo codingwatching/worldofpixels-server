@@ -15,6 +15,7 @@
 #include <set>
 #include <unordered_map>
 #include <map>
+#include <optional>
 #include <vector>
 #include <tuple>
 #include <memory>
@@ -34,7 +35,7 @@ private:
 	IdSys<Player::Id> ids;
 	TaskBuffer& tb; // for http chunk requests
 	bool updateRequired;
-	bool drawRestricted;
+	bool drawRestricted; // TODO: use to restrict drawing to owner only
 
 	std::function<void()> unload;
 
@@ -82,8 +83,8 @@ public:
 	bool save();
 
 	sz_t getPlayerCount() const;
-	std::string getMotd() const;
-	User::Id getOwner() const;
+	std::string_view getMotd() const;
+	std::optional<User::Id> getOwner() const;
 
 	void restrictDrawing(bool);
 

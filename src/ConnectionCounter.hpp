@@ -7,6 +7,7 @@
 #include <functional>
 
 #include <Ip.hpp>
+#include <HttpData.hpp>
 #include <explints.hpp>
 
 class ConnectionCounter : public ConnectionProcessor {
@@ -32,7 +33,7 @@ public:
 	void setMaxConnectionsPerIp(u8);
 	void setCounterUpdateFunc(std::function<void(ConnectionCounter&)>);
 
-	bool preCheck(IncomingConnection&, uWS::HttpRequest&);
+	bool preCheck(IncomingConnection&, HttpData);
 
 	void connected(Client&);
 	void disconnected(ClosedConnection&);

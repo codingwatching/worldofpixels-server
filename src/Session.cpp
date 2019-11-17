@@ -11,14 +11,10 @@
 
 #pragma message("TODO: Think if HTTP requests need to prevent session expires")
 
-Session::Session(ll::shared_ptr<User> usr, Ip ip, std::string ua, std::string lang, std::chrono::minutes maxInactivity)
+Session::Session(ll::shared_ptr<User> usr, Ip ip, std::chrono::system_clock::time_point created)
 : user(std::move(usr)),
-  maxInactivity(std::move(maxInactivity)),
   creatorIp(ip),
-  creatorUa(std::move(ua)),
-  creatorLang(std::move(lang)),
-  created(std::chrono::system_clock::now()),
-  expires(created + this->maxInactivity) {
+  created(created) {
 	user->addSession(*this);
 }
 
@@ -57,12 +53,8 @@ void Session::userWasUpdated() {
 	});
 }
 
-void Session::updateExpiryTime() {
-	expires = std::chrono::system_clock::now() + maxInactivity;
-}
-
-bool Session::isExpired() const { // always false if !activeClients.empty()
-	return activeClients.empty() && std::chrono::system_clock::now() >= expires;
+sz_t Session::clientCount() const {
+	return activeClients.size();
 }
 
 User& Session::getUser() const {
@@ -73,31 +65,19 @@ std::chrono::system_clock::time_point Session::getCreationTime() const {
 	return created;
 }
 
-std::chrono::system_clock::time_point Session::getExpiryTime() const {
-	return expires;
-}
-
 Ip Session::getCreatorIp() const {
 	return creatorIp;
-}
-
-const std::string& Session::getCreatorUserAgent() const {
-	return creatorUa;
-}
-
-const std::string& Session::getPreferredLanguage() const {
-	return creatorLang;
 }
 
 void to_json(nlohmann::json& j, const Session& s) {
 	j = {
 		{ "created", std::chrono::duration_cast<std::chrono::milliseconds>(s.getCreationTime().time_since_epoch()).count() },
-		{ "expires", std::chrono::duration_cast<std::chrono::milliseconds>(s.getExpiryTime().time_since_epoch()).count() },
 		{ "user", s.getUser() },
+		{ "clients", {
+			{ "count", s.clientCount() }
+		}},
 		{ "creator", {
-			{ "ip", s.getCreatorIp() },
-			{ "ua", s.getCreatorUserAgent() },
-			{ "lang", s.getPreferredLanguage() }
+			{ "ip", s.getCreatorIp() }
 		}}
 	};
 }

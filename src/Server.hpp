@@ -1,8 +1,11 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <chrono>
 #include <memory>
+#include <functional>
+#include <map>
 
 #include <ConnectionManager.hpp>
 #include <Storage.hpp>
@@ -13,7 +16,7 @@
 #include <PacketReader.hpp>
 #include <explints.hpp>
 #include <TimedCallbacks.hpp>
-#include <AsyncHttp.hpp>
+#include <AsyncCurl.hpp>
 #include <TaskBuffer.hpp>
 #include <AsyncPostgres.hpp>
 
@@ -28,16 +31,18 @@ class Server {
 	// To stop the server from a signal handler, or other thread
 	std::unique_ptr<uS::Async, void (*)(uS::Async *)> stopCaller;
 
+	std::map<std::string, std::function<void(std::string_view)>, std::less<>> notifHandlers;
+
 	Storage s;
 	BansManager& bm;
 	TaskBuffer tb;
 	TimedCallbacks tc;
+	AsyncPostgres ap;
 	AuthManager am;
 	WorldManager wm;
 	ConnectionManager conn;
 	ApiProcessor api;
-	AsyncHttp hcli;
-	AsyncPostgres ap;
+	AsyncCurl ac;
 	PacketReader<Client> pr;
 
 	u32 saveTimer;
@@ -52,6 +57,7 @@ public:
 	void stop();
 
 private:
+	void registerNotifs();
 	void registerEndpoints();
 	void registerPackets();
 	static void doStop(uS::Async *);

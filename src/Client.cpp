@@ -1,24 +1,32 @@
 #include "Client.hpp"
 
+#include <stdexcept>
+
 #include <uWS.h>
 
 #include <utils.hpp>
 #include <PrepMsg.hpp>
+#include <shared_ptr_ll.hpp>
 
 #include <World.hpp>
 #include <Session.hpp>
 
-Client::Client(uWS::WebSocket<uWS::SERVER> * ws, Session& s, Ip ip, Player::Builder& pb)
+Client::Client(uWS::WebSocket<uWS::SERVER> * ws, ll::shared_ptr<Session> s, Ip ip, Player::Builder& pb)
 : ws(ws),
-  session(s),
+  session(std::move(s)),
+  connectedOn(std::chrono::steady_clock::now()),
   lastAction(std::chrono::steady_clock::now()),
   ip(ip),
   pl(pb.setClient(*this)) {
-	session.addClient(*this);
+  	if (!session) {
+  		throw std::invalid_argument("Client session is null?!");
+  	}
+
+	session->addClient(*this);
 }
 
 Client::~Client() {
-	session.delClient(*this);
+	session->delClient(*this);
 }
 
 void Client::updateLastActionTime() {
@@ -27,6 +35,10 @@ void Client::updateLastActionTime() {
 
 bool Client::inactiveKickEnabled() const {
 	return true;
+}
+
+std::chrono::seconds Client::getSecondsConnected() const {
+	return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - connectedOn);
 }
 
 std::chrono::steady_clock::time_point Client::getLastActionTime() const {
@@ -46,11 +58,11 @@ Player& Client::getPlayer() {
 }
 
 Session& Client::getSession() {
-	return session;
+	return *session;
 }
 
 User& Client::getUser() {
-	return session.getUser();
+	return session->getUser();
 }
 
 void Client::send(const PrepMsg& p) {

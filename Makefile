@@ -8,7 +8,7 @@ DEP_FILES = $(OBJ_FILES:.o=.d)
 TARGET    = out
 
 OPT_REL   = -O2
-LD_REL    = 
+LD_REL    =
 
 OPT_DBG  = -Og -g
 LD_DBG   =

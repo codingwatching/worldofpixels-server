@@ -13,113 +13,66 @@
 
 #include <nlohmann/json.hpp>
 
+std::function<void(ll::shared_ptr<Request>)> cancelHandler(std::function<bool()> f) {
+	if (!f) {
+		return nullptr;
+	}
+
+	return [cancel{std::move(f)}] (auto) {
+		if (!cancel()) {
+			std::cout << "Failed to cancel query" << std::endl;
+		}
+	};
+}
+
 void Server::registerEndpoints() {
-	/*api.on(ApiProcessor::MGET)
-		.path("get")
-		.var()
-	.onOutsider(true, [this] (ll::shared_ptr<Request> req, nlohmann::json, std::string url) {
-		hcli.addRequest(std::move(url), [req{std::move(req)}] (auto result) {
-			std::cout << "done: " << result.successful << " (" << result.responseCode << "): ";
-			if (result.errorString) std::cout << result.errorString;
+	api.on(ApiProcessor::MGET)
+		.path("sso")
+	.end([this] (ll::shared_ptr<Request> req, std::string_view) {
+		auto ssotok = req->getQueryParam("ssotoken");
+		if (!ssotok) {
+			req->writeStatus("400 Bad Request");
+			req->end();
+			return;
+		}
+
+		req->onCancel(cancelHandler(am.useSsoToken(*ssotok, "owop", [req{std::move(req)}] (auto token, bool persistent) {
 			if (req->isCancelled()) {
-				std::cout << " [Request was cancelled!!]" << std::endl;
 				return;
 			}
 
-			std::cout << std::endl;
-			req->end(result.data.c_str(), result.data.size());
-		});
-	});*/
-
-	api.on(ApiProcessor::MGET)
-		.path("auth")
-		.path("guest")
-	.onOutsider(true, [this] (ll::shared_ptr<Request> req, nlohmann::json) {
-		std::string ua;
-		std::string lang("en");
-
-		if (auto h = req->getData()->getHeader("accept-language", 15)) {
-			auto langs(tokenize(h.toString(), ',', true));
-			if (langs.size() != 0) {
-				lang = std::move(langs[0]);
-				// example: "en-US;q=0.9", we want just "en" (for now)
-				sz_t i = lang.find_first_of("-;");
-				if (i != std::string::npos) {
-					lang.erase(i); // from - or ; to the end
-				}
+			if (!token) {
+				req->writeStatus("400 Bad Request");
+				req->end("INVALID_SSO_TOKEN");
+				return;
 			}
-		}
 
-		if (auto h = req->getData()->getHeader("user-agent", 10)) {
-			ua = h.toString();
-		}
-
-		Ip ip(req->getIp()); // done here because the move invalidates ref before calling getIp
-		am.createGuestSession(ip, std::move(ua), std::move(lang), [req{std::move(req)}] (auto token, Session& s) {
-			if (!req->isCancelled()) {
-				std::string b64tok(base64Encode(token.data(), token.size()));
-				req->end({
-					{ "token", std::move(b64tok) }
-				});
-			} else {
-				// expire the session?
+			// either we refresh the cookie on uvias.com, or on owop. refreshing
+			// it only on owop would be a problem since it would let the cookie on
+			// uvias expire. So we just refresh the cookie on uvias.com and set this
+			// one to never expire, if the session is persistent
+			std::vector<std::string_view> directives{"Secure", "HttpOnly", "Path=/", "SameSite=lax"};
+			if (persistent) {
+				// string data shouldn't be destroyed since it's a string literal
+				directives.emplace_back("expires=Fri, 31 Dec 9999 23:59:59 GMT");
 			}
-		});
+
+			req->writeStatus("303 See Other");
+			req->setCookie("uviastoken", *token, std::move(directives));
+			// redirect to main page
+			req->writeHeader("Location", "/");
+			req->end();
+		})));
 	});
 
 	//////////////////// /users
-
-	// Get local user
-	api.on(ApiProcessor::MGET) // definition order matters here!
-		.path("users")
-		.path("@me")
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s) {
-		User& u(s.getUser());
-
-		req->end({
-			{ "public", u },
-			{ "private", {
-				{ "lastWorld", u.getLastWorld() }
-			}}
-		});
-	});
-
-	// Get user
-	api.on(ApiProcessor::MGET)
-		.path("users")
-		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, User::Id uid) {
-		am.getOrLoadUser(uid, [req{std::move(req)}] (ll::shared_ptr<User> user) {
-			if (!req->isCancelled()) {
-				req->end(*user);
-			}
-		});
-	});
-
-	// Modify user
-	api.on(ApiProcessor::MPATCH)
-		.path("users")
-		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, User::Id uid) {
-		/*req->writeStatus("405 Method Not Allowed");
-		req->end();*/
-	});
-
-	// Kick user
-	api.on(ApiProcessor::MPOST)
-		.path("users")
-		.var()
-		.path("kick")
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, User::Id uid) {
-
-	});
 
 	// Ban user
 	api.on(ApiProcessor::MPOST)
 		.path("users")
 		.var()
 		.path("ban")
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, User::Id uid) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, User::Id uid) {
 
 	});
 
@@ -128,7 +81,7 @@ void Server::registerEndpoints() {
 	api.on(ApiProcessor::MGET) // Get world
 		.path("worlds")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName) {
 		if (wm.isLoaded(worldName)) {
 			req->end(wm.getOrLoadWorld(worldName));
 		} else {
@@ -140,11 +93,38 @@ void Server::registerEndpoints() {
 	api.on(ApiProcessor::MPATCH) // Modify world
 		.path("worlds")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName) {
 
 	});
 
-	api.on(ApiProcessor::MGET) // Switch world
+	api.on(ApiProcessor::MGET)
+		.path("worlds")
+		.var()
+		.path("view")
+		.var()
+		.var()
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName, i32 x, i32 y) {
+		//std::cout << "[" << j << "]" << worldName << ","<< x << "," << y << std::endl;
+		if (!wm.verifyWorldName(worldName)) {
+			req->writeStatus("400 Bad Request");
+			req->end();
+			return;
+		}
+
+		if (!wm.isLoaded(worldName)) {
+			// nginx is supposed to serve unloaded worlds and chunks.
+			req->writeStatus("404 Not Found");
+			req->end();
+			return;
+		}
+
+		World& world = wm.getOrLoadWorld(worldName);
+
+		// will encode the png in another thread if necessary and end the request when done
+		world.sendChunk(x, y, std::move(req));
+	});
+
+	api.on(ApiProcessor::MPOST) // Switch world
 		.path("worlds")
 		.var()
 		.path("cursors")
@@ -152,11 +132,11 @@ void Server::registerEndpoints() {
 		.path("move")
 		.path("world")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName, Player::Id pid, std::string newWorldName) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName, Player::Id pid, std::string newWorldName) {
 
 	});
 
-	api.on(ApiProcessor::MGET) // Teleport to pos
+	api.on(ApiProcessor::MPOST) // Teleport to pos
 		.path("worlds")
 		.var()
 		.path("cursors")
@@ -165,11 +145,11 @@ void Server::registerEndpoints() {
 		.path("pos")
 		.var()
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName, Player::Id pid, World::Pos x, World::Pos y) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName, Player::Id pid, World::Pos x, World::Pos y) {
 
 	});
 
-	api.on(ApiProcessor::MGET) // Teleport to player
+	api.on(ApiProcessor::MPOST) // Teleport to player
 		.path("worlds")
 		.var()
 		.path("cursors")
@@ -177,25 +157,25 @@ void Server::registerEndpoints() {
 		.path("move")
 		.path("player")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName, Player::Id fromPid, Player::Id toPid) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName, Player::Id fromPid, Player::Id toPid) {
 
 	});
 
-	api.on(ApiProcessor::MGET) // Kick own player
+	api.on(ApiProcessor::MPOST) // Kick player
 		.path("worlds")
 		.var()
 		.path("cursors")
 		.var()
 		.path("kick")
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName, Player::Id pid) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName, Player::Id pid) {
 
 	});
 
-	api.on(ApiProcessor::MGET) // Get world roles
+	/*api.on(ApiProcessor::MGET) // Get world roles
 		.path("worlds")
 		.var()
 		.path("roles")
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName) {
 
 	});
 
@@ -203,7 +183,7 @@ void Server::registerEndpoints() {
 		.path("worlds")
 		.var()
 		.path("roles")
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName) {
 
 	});
 
@@ -212,7 +192,7 @@ void Server::registerEndpoints() {
 		.var()
 		.path("roles")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName, std::string roleId) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName, std::string roleId) {
 
 	});
 
@@ -221,7 +201,7 @@ void Server::registerEndpoints() {
 		.var()
 		.path("roles")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName, std::string roleId) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName, std::string roleId) {
 
 	});
 
@@ -230,8 +210,9 @@ void Server::registerEndpoints() {
 		.var()
 		.path("roles")
 		.var()
+		.path("user")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName, std::string roleId, User::Id uid) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName, std::string roleId, User::Id uid) {
 
 	});
 
@@ -240,17 +221,18 @@ void Server::registerEndpoints() {
 		.var()
 		.path("roles")
 		.var()
+		.path("user")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName, std::string roleId, User::Id uid) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName, std::string roleId, User::Id uid) {
 
-	});
+	});*/
 
 	/////////////////////// /chats
 
 	api.on(ApiProcessor::MGET) // Get chat
 		.path("chats")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string chatId) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string chatId) {
 
 	});
 
@@ -258,7 +240,7 @@ void Server::registerEndpoints() {
 		.path("chats")
 		.var()
 		.path("messages")
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string chatId) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string chatId) {
 
 	});
 
@@ -266,7 +248,7 @@ void Server::registerEndpoints() {
 		.path("chats")
 		.var()
 		.path("messages")
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string chatId) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string chatId) {
 
 	});
 
@@ -275,7 +257,7 @@ void Server::registerEndpoints() {
 		.var()
 		.path("messages")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string chatId, std::string messageId) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string chatId, std::string messageId) {
 
 	});
 
@@ -284,7 +266,7 @@ void Server::registerEndpoints() {
 		.var()
 		.path("messages")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string chatId, std::string messageId) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string chatId, std::string messageId) {
 
 	});
 
@@ -293,16 +275,16 @@ void Server::registerEndpoints() {
 		.var()
 		.path("messages")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string chatId, std::string messageId) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string chatId, std::string messageId) {
 
 	});
 
 	/////////////////////// /emotes
 
-	api.on(ApiProcessor::MGET)
+	/*api.on(ApiProcessor::MGET)
 		.path("emotes")
 		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string emoteId) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string emoteId) {
 
 	});
 
@@ -310,9 +292,9 @@ void Server::registerEndpoints() {
 		.path("emotes")
 		.var()
 		.path("image")
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string emoteId) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string emoteId) {
 
-	});
+	});*/
 
 	///////////////////////
 	// Extras
@@ -320,16 +302,16 @@ void Server::registerEndpoints() {
 
 	api.on(ApiProcessor::MGET)
 		.path("status")
-	.onOutsider(false, [this] (ll::shared_ptr<Request> req, nlohmann::json) {
+	.end([this] (ll::shared_ptr<Request> req, std::string_view) {
 		Ip ip(req->getIp());
 
 		bool banned = bm.isBanned(ip);
 
 		nlohmann::json j = {
-			{ "motd", "Almost done!" },
-			{ "http", {
-				{ "active", hcli.activeHandles() },
-				{ "queued", hcli.queuedRequests() }
+			{ "motd", "Almost done, I think!" },
+			{ "curl", {
+				{ "active", ac.activeHandles() },
+				{ "queued", ac.queuedRequests() }
 			}},
 			{ "sql", {
 				{ "connected", ap.isConnected() },
@@ -357,62 +339,5 @@ void Server::registerEndpoints() {
 		}
 
 		req->end(j);
-	});
-
-	api.on(ApiProcessor::MGET)
-		.path("view")
-		.var()
-		.var()
-		.var()
-	.onFriend([this] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s, std::string worldName, i32 x, i32 y) {
-		//std::cout << "[" << j << "]" << worldName << ","<< x << "," << y << std::endl;
-		if (!wm.verifyWorldName(worldName)) {
-			req->writeStatus("400 Bad Request", 15);
-			req->end();
-			return;
-		}
-
-		if (!wm.isLoaded(worldName)) {
-			// nginx is supposed to serve unloaded worlds and chunks.
-			req->writeStatus("404 Not Found", 13);
-			req->end();
-			return;
-		}
-
-		World& world = wm.getOrLoadWorld(worldName);
-
-		// will encode the png in another thread if necessary and end the request when done
-		world.sendChunk(x, y, std::move(req));
-	});
-
-	api.on(ApiProcessor::MGET)
-		.path("tokenlist")
-	.onOutsider(false, [this] (ll::shared_ptr<Request> req, nlohmann::json) {
-		nlohmann::json j;
-		am.forEachSession([&j] (const auto& token, const auto& session) {
-			std::string b64tok(base64Encode(token.data(), token.size()));
-			j[b64tok] = session;
-		});
-
-		req->end(std::move(j));
-	});
-
-	api.on(ApiProcessor::MGET)
-		.path("debug")
-	.onAny([] (ll::shared_ptr<Request> req, nlohmann::json j) {
-
-		req->end({
-			{ "call", "outsider" },
-			{ "body", std::move(j) }
-		});
-
-	}, [] (ll::shared_ptr<Request> req, nlohmann::json j, Session& s) {
-
-		req->end({
-			{ "call", "friend" },
-			{ "body", std::move(j) },
-			{ "session", s }
-		});
-
 	});
 }

@@ -32,6 +32,9 @@ public:
 
 	static bool verifyWorldName(const std::string&);
 
+	std::string_view getDefaultWorldName() const;
+	bool setDefaultWorldName(std::string);
+
 	// should change World& for std::optional<World&> on c++17
 	bool isLoaded(const std::string&) const;
 	World& getOrLoadWorld(std::string);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <functional>
 #include <tuple>
 #include <vector>
@@ -47,6 +48,7 @@ public:
 	const std::string& getWorldName() const;
 	const std::string& getWorldDir() const;
 	std::string getChunkFilePath(i32 x, i32 y) const;
+	bool isChunkOnDisk(i32 x, i32 y) const;
 
 	bool save();
 
@@ -55,15 +57,13 @@ public:
 
 	u16 getPixelRate();
 	RGB_u getBackgroundColor() const;
-	std::string getMotd() const;
-	std::string getPassword();
-	bool getGlobalModeratorsAllowed(); // to be removed
+	std::string_view getMotd() const;
+	std::string_view getPassword();
 
 	void setPixelRate(u16);
 	void setBackgroundColor(RGB_u);
 	void setMotd(std::string);
 	void setPassword(std::string);
-	void setGlobalModeratorsAllowed(bool);
 
 	void convertNext();
 	void maybeConvertChunk(i32, i32);
@@ -90,17 +90,17 @@ public:
 
 	static std::string getRandomPassword();
 
-	std::string getModPass();
-	std::string getAdminPass();
-	std::string getBindAddress();
+	std::string_view getBindAddress() const;
+	u16 getBindPort() const;
+	std::string_view getDefaultWorldName() const;
 
-	u16 getBindPort();
-
-	void setModPass(std::string);
-	void setAdminPass(std::string);
 	void setBindAddress(std::string);
 	void setBindPort(u16);
+	void setDefaultWorldName(std::string);
 
 	BansManager& getBansManager();
 	std::tuple<std::string, std::string> getWorldStorageArgsFor(const std::string& worldName);
+
+private:
+	void populateConfigFile();
 };

@@ -2,17 +2,14 @@
 
 #include <ConnectionManager.hpp>
 #include <Session.hpp>
-#include <keys.hpp>
+#include <User.hpp>
+#include <UviasRank.hpp>
 
-#include <AsyncHttp.hpp>
-#include <TimedCallbacks.hpp>
+#include <ProxycheckioRestApi.hpp>
+#include <HttpData.hpp>
 #include <utils.hpp>
 
-#include <iostream>
-
 #include <nlohmann/json.hpp>
-
-// TODO: don't check the same ip more than once each time
 
 static void to_json(nlohmann::json& j, const ProxyChecker::State s) {
 	switch (static_cast<int>(s)) { // it looks very nice, doesn't it?
@@ -30,78 +27,38 @@ static void to_json(nlohmann::json& j, const ProxyChecker::State s) {
 	}
 }
 
-ProxyChecker::ProxyChecker(AsyncHttp& hcli, TimedCallbacks& tc)
-: hcli(hcli),
-  state(State::GUESTS) {
-	tc.startTimer([this] {
-		auto now(std::chrono::steady_clock::now());
-
-		for (auto it = cache.begin(); it != cache.end();) {
-			std::chrono::hours expiryInterval(it->second.isProxy ? 12 : 24);
-
-			if (now - it->second.checkTime > expiryInterval) {
-				it = cache.erase(it);
-			} else {
-				++it;
-			}
-		}
-
-		return true;
-	}, 60 * 60 * 1000);
-}
+ProxyChecker::ProxyChecker(ProxycheckioRestApi& pcra)
+: pcra(pcra),
+  state(State::GUESTS) { }
 
 void ProxyChecker::setState(State s) {
 	state = s;
 }
 
 bool ProxyChecker::isCheckNeededFor(IncomingConnection& ic) {
-	bool inCache = cache.find(ic.ip) != cache.end();
-	return !inCache && (state == State::ALL || (ic.session.getUser().isGuest() && state == State::GUESTS));
+	// this doesn't get the result of the cache, only if it exists (optional not empty)
+	bool inCache = bool(pcra.cachedResult(ic.ip));
+	if (inCache) {
+		return false;
+	}
+
+	// assuming ic.ci.session is not empty
+	return state == State::ALL || (state == State::GUESTS && ic.ci.session->getUser().getUviasRank().getName() == "guests");
 }
 
 bool ProxyChecker::isAsync(IncomingConnection& ic) {
 	return isCheckNeededFor(ic);
 }
 
-bool ProxyChecker::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
-	auto search = cache.find(ic.ip);
-	return search == cache.end() || !search->second.isProxy;
+bool ProxyChecker::preCheck(IncomingConnection& ic, HttpData) {
+	// return true if not cached or isn't proxy
+	return !pcra.cachedResult(ic.ip).value_or(false);
 }
 
 void ProxyChecker::asyncCheck(IncomingConnection& ic, std::function<void(bool)> cb) {
-	hcli.addRequest(std::string("http://proxycheck.io/v2/").append(ic.ip.toString()), {
-		{"key", PROXY_API_KEY},
-	}, [this, &ic, end{std::move(cb)}] (auto res) {
-		if (!res.successful) {
-			std::cerr << "Error when checking for proxy: " << res.errorString << ", " << res.data << std::endl;
-			end(!ic.session.getUser().isGuest());
-			return;
-		}
-
-		std::string ip(ic.ip.toString());
-		bool verified = false;
-		bool isProxy = false;
-		try {
-			nlohmann::json j = nlohmann::json::parse(res.data);
-			// std::string st(j["status"].get<std::string>());
-			if (j["message"].is_string()) {
-				std::cout << "Message from proxycheck.io: " << j["message"].get<std::string>() << std::endl;
-			}
-
-			if (j[ip].is_object()) {
-				verified = true;
-				isProxy = j[ip]["proxy"].get<std::string>() == "yes";
-			}
-		} catch (const std::exception& e) {
-			std::cerr << "Exception when parsing json by proxycheck.io! (" << res.data << ")" << std::endl;
-			std::cerr << "what(): " << e.what() << std::endl;
-		}
-
-		if (verified) {
-			cache.emplace(ic.ip, ProxyChecker::Info{isProxy, std::chrono::steady_clock::now()});
-		}
-
-		end(verified ? !isProxy : !ic.session.getUser().isGuest());
+	pcra.check(ic.ip, [this, &ic, end{std::move(cb)}] (auto res, auto) {
+		// if request OK and not a proxy, continue
+		end(res && !*res);
 	});
 }
 

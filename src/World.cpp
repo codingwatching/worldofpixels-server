@@ -8,6 +8,7 @@
 #include <ApiProcessor.hpp>
 
 #include <TaskBuffer.hpp>
+#include <utils.hpp>
 
 #include <iostream>
 #include <utility>
@@ -39,9 +40,10 @@ u64 key(i32 x, i32 y) {
 }
 
 void to_json(nlohmann::json& j, const World& w) {
+	auto owner(w.getOwner());
 	j = {
-		{ "owner", w.getOwner() },
-		{ "motd", w.getMotd() },
+		{ "owner", owner ? nlohmann::json{} : nlohmann::json{n2hexstr(*owner)} },
+		{ "motd", std::string(w.getMotd()) },
 		{ "playersOnline", w.getPlayerCount() }
 	};
 }
@@ -102,12 +104,13 @@ void World::playerJoined(Player& pl) {
 		pl.tell(getMotd());
 	}*/
 
-	if (hasPassword()) {
+	/*if (hasPassword()) {
 		pl.tell("This world has a password set. Use '/pass PASSWORD' to unlock drawing.");
-	}
+	}*/
 
 	players.emplace(std::ref(pl));
 	playerUpdated(pl);
+	WorldData::one(pl.getClient().getWs(), worldName, std::string(getMotd()), getBackgroundColor().rgb, drawRestricted, getOwner());
 }
 
 void World::playerUpdated(Player& pl) {
@@ -139,7 +142,7 @@ void World::sendUpdates() {
 
 	updateRequired = false;
 
-	sz_t offs = 2;
+	/*sz_t offs = 2;
 	u32 tmp;
 
 	u8 buf[1 + 1 + playerUpdates.size() * (sizeof(u32) + sizeof(pinfo_t))
@@ -221,7 +224,7 @@ void World::sendUpdates() {
 
 	if (pendingUpdates) {
 		schedUpdates();
-	}
+	}*/
 }
 
 bool World::verifyChunkPos(Chunk::Pos x, Chunk::Pos y) {
@@ -259,13 +262,19 @@ void World::sendPlayerCountStats(u32 globalPlayerCount) {
 // returns true if this function ended the request before returning
 bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request> req) {
 	if (!verifyChunkPos(x, y)) {
-		req->writeStatus("400 Bad Request", 15);
+		req->writeStatus("400 Bad Request");
 		req->end();
 		return true;
 	}
 
-	// will load the chunk if unloaded... possible race with nginx if not
-	// TODO: Stream file from the server, instead of relying on nginx
+	if (!isChunkOnDisk(x, y)) { // if the chunk doesn't exist, don't load it
+		req->writeStatus("204 No Content");
+		req->end();
+		return true;
+	}
+
+	// will load the chunk if unloaded
+	// TODO: Stream file from the server, instead of loading it
 	Chunk& chunk = getChunk(x, y);
 
 	if (!chunk.isPngCacheOutdated()) {
@@ -380,12 +389,12 @@ sz_t World::getPlayerCount() const {
 	return players.size();
 }
 
-std::string World::getMotd() const {
+std::string_view World::getMotd() const {
 	return WorldStorage::getMotd();
 }
 
-User::Id World::getOwner() const {
-	return 0;
+std::optional<User::Id> World::getOwner() const {
+	return std::nullopt;
 }
 
 void World::restrictDrawing(bool s) {
@@ -403,6 +412,7 @@ bool World::tryUnloadAllChunks() {
 	for (auto it = chunks.begin(); it != chunks.end();) {
 		it = it->second.shouldUnload(true) ? chunks.erase(it) : std::next(it);
 	}
+
 	return chunks.size() == 0;
 }
 

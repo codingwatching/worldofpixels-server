@@ -27,6 +27,7 @@ Chunk::Chunk(Pos x, Pos y, const WorldStorage& ws)
   y(y),
   ws(ws),
   canUnload(false), // DON'T unload before this is constructed (can happen by alloc fail)
+  protectionDataEmpty(false),
   pngCacheOutdated(true),
   pngFileOutdated(false) {
 	bool readerCalled = false;
@@ -35,6 +36,7 @@ Chunk::Chunk(Pos x, Pos y, const WorldStorage& ws)
 		          << this->x << ", " << this->y << ". Resetting." << std::endl;
 		protectionData.fill(0);
 		pngFileOutdated = true;
+		protectionDataEmpty = true;
   	};
 
 	data.setChunkReader("woPp", [this, fail{std::move(fail)}, &readerCalled] (u8 * d, sz_t size) {
@@ -47,38 +49,57 @@ Chunk::Chunk(Pos x, Pos y, const WorldStorage& ws)
 				fail();
 				return true;
 			}
+
 			rle::decompress(d, size, protectionData.data(), protectionData.size());
 		} catch(std::length_error& e) {
 			fail();
 			return true;
 		}
+
 		return true;
 	});
 
-	data.setChunkWriter("woPp", [this] () {
+	data.setChunkWriter("woPp", [this] {
 		std::shared_lock<std::shared_timed_mutex> _(sm);
+		if (protectionDataEmpty) {
+			// don't write protection data if it's all 0
+			return std::pair<std::unique_ptr<u8[]>, sz_t>{nullptr, 0};
+		}
+
 		return rle::compress(protectionData.data(), protectionData.size());
 	});
 
-	std::string file(ws.getChunkFilePath(x, y));
 
-	lockChunk();
-	if (fileExists(file)) {
-		data.readFile(file);
+	if (data.readFile(ws.getChunkFilePath(x, y))) {
 		if (!readerCalled) {
 			protectionData.fill(0);
+			protectionDataEmpty = true;
 		}
 	} else {
 		data.allocate(Chunk::size, Chunk::size, ws.getBackgroundColor());
 		protectionData.fill(0);
+		protectionDataEmpty = true;
 	}
 
 	preventUnloading(false);
 }
 
 Chunk::~Chunk() {
-	save();
-	unlockChunk();
+	if (isChunkEmpty()) {
+		std::string fpath(ws.getChunkFilePath(x, y));
+		if (int err = std::remove(fpath.c_str())) {
+			std::string s("Couldn't delete chunk file (" + fpath + ")");
+			std:perror(s.c_str());
+		}
+
+		return;
+	}
+
+	try {
+		save();
+	} catch (const std::runtime_error& e) {
+		std::cerr << "Error while saving chunk: " << e.what() << std::endl;
+	}
 }
 
 bool Chunk::setPixel(u16 x, u16 y, RGB_u clr) {
@@ -93,6 +114,7 @@ bool Chunk::setPixel(u16 x, u16 y, RGB_u clr) {
 		pngCacheOutdated = true;
 		return true;
 	}
+
 	return false;
 }
 
@@ -103,7 +125,9 @@ void Chunk::setProtectionGid(ProtPos x, ProtPos y, u32 gid) {
 
 	pngFileOutdated = true;
 	pngCacheOutdated = true;
+
 	std::unique_lock<std::shared_timed_mutex> _(sm);
+	protectionDataEmpty = false;
 	protectionData[y * Chunk::pc + x] = gid;
 }
 
@@ -134,10 +158,22 @@ const std::vector<u8>& Chunk::getPngData() const {
 
 bool Chunk::save() {
 	if (pngFileOutdated) {
-		data.writeFile(ws.getChunkFilePath(x, y));
+		std::string fpath(ws.getChunkFilePath(x, y));
+		if (pngCacheOutdated) {
+			data.writeFile(fpath);
+		} else {
+			std::ofstream f(fpath, std::ios::out | std::ios::binary | std::ios::trunc);
+			if (!f) {
+				throw std::runtime_error("Couldn't open file: " + fpath);
+			}
+
+			f.write(reinterpret_cast<char *>(pngCache.data()), pngCache.size());
+		}
+
 		pngFileOutdated = false;
 		return true;
 	}
+
 	return false;
 }
 
@@ -157,28 +193,28 @@ void Chunk::preventUnloading(bool state) {
 	canUnload = !state;
 }
 
-void Chunk::lockChunk() {
-	std::string file(ws.getChunkFilePath(x, y) + ".lock");
-	if (fileExists(file)) {
-		// what do? server probably didn't close correctly
-		// if we reach this condition.
-		std::cerr << "!!! Chunk: " << x << ", " << y << ", from world: '" << ws.getWorldName()
-			<< "' is already locked. Is another instance of the server running,"
-			<< " or was it not closed correctly? Reading anyway." << std::endl;
+bool Chunk::isChunkEmpty() {
+	// very slow
+	for (u32 i = 0; i < protectionData.size(); i++) {
+		if (protectionData[i] != 0) {
+			return false;
+		}
 	}
 
-	if (!std::fstream(file, std::ios::trunc | std::ios::out | std::ios::binary)) {
-		std::cerr << "!!! Couldn't create/open lockfile. Permissions problem? Throwing exception "
-			<< "to prevent future problems." << std::endl;
-		throw std::runtime_error("Could not create chunk lockfile! World: " + ws.getWorldName()
-			+ ", Chunk: " + std::to_string(x) + ", " + std::to_string(y) + ".");
+	if (!protectionDataEmpty) {
+		protectionDataEmpty = true;
+		pngCacheOutdated = true;
+		pngFileOutdated = true;
 	}
-}
 
-void Chunk::unlockChunk() {
-	std::string file(ws.getChunkFilePath(x, y) + ".lock");
-	if (int err = std::remove(file.c_str())) {
-		std::string s("Couldn't delete lockfile (" + file + ")");
-		std:perror(s.c_str());
+	RGB_u bgclr = ws.getBackgroundColor();
+	for (u32 y = 0; y < data.getHeight(); y++) {
+		for (u32 x = 0; x < data.getWidth(); x++) {
+			if (data.getPixel(x, y).rgb != bgclr.rgb) {
+				return false;
+			}
+		}
 	}
+
+	return true;
 }

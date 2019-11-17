@@ -6,17 +6,18 @@
 #include <forward_list>
 #include <list>
 #include <typeindex>
+#include <typeinfo>
 
 #include <explints.hpp>
+#include <shared_ptr_ll.hpp>
 #include <fwd_uWS.h>
 #include <Ip.hpp>
-
-#include <User.hpp>
 
 class ConnectionProcessor;
 class IncomingConnection;
 class Client;
-class AuthManager;
+class Session;
+class HttpData;
 
 struct ClosedConnection {
 	uWS::WebSocket<true> * const ws;
@@ -29,22 +30,23 @@ struct ClosedConnection {
 
 struct ConnectionInfo {
 	std::string world;
+	ll::shared_ptr<Session> session;
 };
 
 struct IncomingConnection {
 	ConnectionInfo ci;
-	Session& session;
 	uWS::WebSocket<true> * ws;
 	std::map<std::string, std::string> args;
 	std::forward_list<std::unique_ptr<ConnectionProcessor>>::iterator nextProcessor;
 	std::list<IncomingConnection>::iterator it; // own position in list
 	Ip ip;
+	// to be used ONLY on asyncChecks, cleared after using callback
+	std::function<void()> onDisconnect;
 	bool cancelled;
 };
 
 class ConnectionManager {
 	uWS::Group<true>& defaultGroup;
-	AuthManager& am;
 
 	std::forward_list<std::unique_ptr<ConnectionProcessor>> processors;
 	std::list<IncomingConnection> pending;
@@ -52,7 +54,7 @@ class ConnectionManager {
 	std::function<Client*(IncomingConnection&)> clientTransformer;
 
 public:
-	ConnectionManager(uWS::Hub&, AuthManager&, std::string protoName);
+	ConnectionManager(uWS::Hub&, std::string protoName);
 
 	void onSocketChecked(std::function<Client*(IncomingConnection&)>);
 
@@ -66,9 +68,9 @@ public:
 	void forEachClient(std::function<void(Client&)>);
 
 private:
-	void handleIncoming(uWS::WebSocket<true> *, Session&, std::map<std::string, std::string>, uWS::HttpRequest, Ip);
+	void handleIncoming(uWS::WebSocket<true> *, std::map<std::string, std::string>, HttpData, Ip);
 	void handleAsync(IncomingConnection&);
-	void handleFail(IncomingConnection&);
+	void handleFail(IncomingConnection&, const std::type_info&);
 	void handleEnd(IncomingConnection&);
 
 	void handleDisconnect(IncomingConnection&, bool);

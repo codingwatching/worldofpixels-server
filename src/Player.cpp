@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <iostream>
+#include <tuple>
 
 #include <World.hpp>
 #include <Client.hpp>
@@ -24,7 +25,12 @@ Player::Player(Client& c, World& w, u32 pid, World::Pos startX, World::Pos start
   modifyWorldAllowed(mod),
   toolId(0),
   pixelStep(0) {
-	// send player data to the client
+	PlayerData::one(cl.getWs(),
+			std::make_tuple(playerId, x, y, pixelStep, toolId),
+			std::make_tuple(paintLimiter.getRate(), paintLimiter.getPer(), paintLimiter.getAllowance()),
+			std::make_tuple(chatLimiter.getRate(), chatLimiter.getPer(), chatLimiter.getAllowance()),
+			chatAllowed, modifyWorldAllowed);
+
 	world.playerJoined(*this);
 	std::cout << "New player on world: " << world.getWorldName() << ", PID: " << playerId << ", UID: " << getUser().getId() << std::endl;
 }

@@ -2,14 +2,7 @@
 
 #include "ConnectionProcessor.hpp"
 
-#include <chrono>
-#include <map>
-
-#include <explints.hpp>
-#include <Ip.hpp>
-
-class AsyncHttp;
-class TimedCallbacks;
+class ProxycheckioRestApi;
 
 class ProxyChecker : public ConnectionProcessor {
 public:
@@ -18,12 +11,11 @@ public:
 private:
 	struct Info;
 
-	AsyncHttp& hcli;
+	ProxycheckioRestApi& pcra;
 	State state;
-	std::map<Ip, Info> cache;
 
 public:
-	ProxyChecker(AsyncHttp&, TimedCallbacks&);
+	ProxyChecker(ProxycheckioRestApi&);
 
 	void setState(State);
 
@@ -31,13 +23,8 @@ public:
 
 	bool isAsync(IncomingConnection&);
 
-	bool preCheck(IncomingConnection&, uWS::HttpRequest&);
+	bool preCheck(IncomingConnection&, HttpData);
 	void asyncCheck(IncomingConnection&, std::function<void(bool)>);
 
 	nlohmann::json getPublicInfo();
-};
-
-struct ProxyChecker::Info {
-	bool isProxy;
-	std::chrono::steady_clock::time_point checkTime;
 };

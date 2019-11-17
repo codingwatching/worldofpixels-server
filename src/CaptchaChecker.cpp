@@ -2,12 +2,11 @@
 
 #include <Session.hpp>
 #include <User.hpp>
+#include <UviasRank.hpp>
 #include <ConnectionManager.hpp>
-#include <keys.hpp>
 
-#include <AsyncHttp.hpp>
-
-#include <iostream>
+#include <RecaptchaRestApi.hpp>
+#include <HttpData.hpp>
 
 #include <nlohmann/json.hpp>
 
@@ -27,8 +26,8 @@ static void to_json(nlohmann::json& j, const CaptchaChecker::State s) {
 	}
 }
 
-CaptchaChecker::CaptchaChecker(AsyncHttp& hcli)
-: hcli(hcli),
+CaptchaChecker::CaptchaChecker(RecaptchaRestApi& rcra)
+: rcra(rcra),
   state(State::GUESTS) { }
 
 void CaptchaChecker::setState(State s) {
@@ -36,14 +35,14 @@ void CaptchaChecker::setState(State s) {
 }
 
 bool CaptchaChecker::isCaptchaEnabledFor(IncomingConnection& ic) {
-	return state == State::ALL || (ic.session.getUser().isGuest() && state == State::GUESTS);
+	return state == State::ALL || (state == State::GUESTS && ic.ci.session->getUser().getUviasRank().getName() == "guests");
 }
 
 bool CaptchaChecker::isAsync(IncomingConnection& ic) {
 	return isCaptchaEnabledFor(ic);
 }
 
-bool CaptchaChecker::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
+bool CaptchaChecker::preCheck(IncomingConnection& ic, HttpData) {
 	if (!isCaptchaEnabledFor(ic)) {
 		return true;
 	}
@@ -57,39 +56,9 @@ bool CaptchaChecker::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
 }
 
 void CaptchaChecker::asyncCheck(IncomingConnection& ic, std::function<void(bool)> cb) {
-	hcli.addRequest("https://www.google.com/recaptcha/api/siteverify", {
-		{"secret", CAPTCHA_API_KEY},
-		{"remoteip", ic.ip.toString().data()}, // XXX: fix when json lib supports string views
-		{"response", ic.args.at("captcha")}
-	}, [&ic, end{std::move(cb)}] (auto res) {
-		if (!res.successful) {
-			/* HTTP ERROR code check */
-			std::cerr << "Error occurred when verifying captcha: " << res.errorString << ", " << res.data << std::endl;
-			end(false); // :thinking:
-			return;
-		}
-
-		bool verified = false;
-		//std::string failReason;
-		try {
-			nlohmann::json response = nlohmann::json::parse(res.data);
-			bool success = response["success"].get<bool>();
-			std::string host(response["hostname"].get<std::string>());
-			verified = success && host == "ourworldofpixels.com"; // XXX: assuming hostname
-			/*if (!success) {
-				failReason = "API rejected token";
-				if (response["error-codes"].is_array()) {
-					failReason += " " + response["error-codes"].dump();
-				}
-			} else if (success && !verified) {
-				failReason = "Wrong hostname: '" + host + "'";
-			}*/
-		} catch (const std::exception& e) {
-			std::cerr << "Exception when parsing json by google! (" << res.data << ")" << std::endl;
-			std::cerr << "what(): " << e.what() << std::endl;
-		}
-
-		end(verified);
+	rcra.check(ic.ip, ic.args.at("captcha"), [this, &ic, end{std::move(cb)}] (auto res, auto) {
+		// if request OK and token verified, continue
+		end(res && *res);
 	});
 }
 

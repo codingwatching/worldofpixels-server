@@ -16,6 +16,7 @@
 #include <rle.hpp>
 #include <BufferHelper.hpp>
 #include <utils.hpp>
+#include <stringparser.hpp>
 
 bool operator<(const twoi32& a, const twoi32& b) {
 	return a.pos < b.pos;
@@ -75,6 +76,11 @@ std::string WorldStorage::getChunkFilePath(i32 x, i32 y) const {
 	return worldDir + "/r." + std::to_string(x) + "." + std::to_string(y) + ".png";
 }
 
+bool WorldStorage::isChunkOnDisk(i32 x, i32 y) const {
+	// xxx: doesnt work right if chunk is less than 512x512
+	return remainingOldClusters.find(twoi32{x, y}) != remainingOldClusters.end() || fileExists(worldDir + "/r." + std::to_string(x) + "." + std::to_string(y) + ".png");
+}
+
 bool WorldStorage::save() {
 	return writeToDisk();
 }
@@ -88,19 +94,17 @@ bool WorldStorage::hasPassword() {
 }
 
 u16 WorldStorage::getPixelRate() {
-	u16 rate = 32;
-	if (hasProp("paintrate")) try {
-		u32 value = stoul(getProp("paintrate"));
-		rate = value > u16(-1) ? u16(-1) : value; // XXX: what if it's 0?
+	try {
+		return fromString<u16>(getProp("paintrate", "32"));
 	} catch(const std::exception& e) {
-		std::cerr << "Invalid pixel paint rate specified in world cfg" << worldName << ", resetting. (" << e.what() << ")" << std::endl;
-		delProp("paintrate");
+		std::cerr << "Invalid pixel paint rate specified in world cfg" << std::endl;
 	}
-	return rate;
+
+	return 32;
 }
 
 RGB_u WorldStorage::getBackgroundColor() const {
-	RGB_u clr = {255, 255, 255};
+	RGB_u clr = {255, 255, 255, 255};
 	if (hasProp("bgcolor")) try {
 		std::string s(getProp("bgcolor"));
 		if (s.compare(0, 2, "0x") != 0) {
@@ -117,22 +121,19 @@ RGB_u WorldStorage::getBackgroundColor() const {
 			clr.rgb = stoul(s, nullptr, 16);
 		}
 	} catch(const std::exception& e) {
-		std::cerr << "Invalid color specified in world cfg" << worldName << ", resetting. (" << e.what() << ")" << std::endl;
+		std::cerr << "Invalid color specified in world cfg (" << e.what() << ")" << std::endl;
 		//delProp("bgcolor");
 	}
+
 	return clr;
 }
 
-std::string WorldStorage::getMotd() const {
+std::string_view WorldStorage::getMotd() const {
 	return getProp("motd");
 }
 
-std::string WorldStorage::getPassword() {
+std::string_view WorldStorage::getPassword() {
 	return getProp("password");
-}
-
-bool WorldStorage::getGlobalModeratorsAllowed() {
-	return getProp("disablemods", "false") != "true";
 }
 
 void WorldStorage::setPixelRate(u16 v) {
@@ -149,14 +150,6 @@ void WorldStorage::setMotd(std::string s) {
 
 void WorldStorage::setPassword(std::string s) {
 	setProp("password", std::move(s));
-}
-
-void WorldStorage::setGlobalModeratorsAllowed(bool b) {
-	if (!b) {
-		setProp("disablemods", "true");
-	} else {
-		delProp("disablemods");
-	}
 }
 
 void WorldStorage::convertNext() {
@@ -342,12 +335,14 @@ void WorldStorage::loadProtectionData() {
 Storage::Storage(std::string bPath)
 : PropertyReader(bPath + "/props.txt"),
   basePath(std::move(bPath)),
-  worldsDir(getOrSetProp("worldfolder", "world_data")),
+  worldsDir(getProp("server.worldfolder", "world_data")),
   worldDirPath(basePath + "/" + worldsDir),
   bm(basePath + "/bans.json") {
 	if (!fileExists(basePath) && !makeDir(basePath)) {
 		throw std::runtime_error("Couldn't access/create directory: " + basePath);
 	}
+
+	populateConfigFile();
 
 	if (!fileExists(worldDirPath) && !makeDir(worldDirPath)) {
 		throw std::runtime_error("Couldn't access/create world directory: " + worldDirPath);
@@ -358,47 +353,28 @@ std::string Storage::getRandomPassword() {
 	return randomStr(10);
 }
 
-std::string Storage::getModPass() {
-	return getOrSetProp("modpass", getRandomPassword());
+std::string_view Storage::getBindAddress() const {
+	return getProp("server.bindto");
 }
 
-std::string Storage::getAdminPass() {
-	return getOrSetProp("adminpass", getRandomPassword());
+u16 Storage::getBindPort() const {
+	return fromString<u16>(getProp("server.port"));
 }
 
-std::string Storage::getBindAddress() {
-	return getOrSetProp("bindto", "0.0.0.0");
-}
-
-u16 Storage::getBindPort() {
-	u16 port = 13374;
-	try {
-		u32 z = std::stoul(getOrSetProp("port", "13374"));
-		if (z > u16(-1)) {
-			throw std::out_of_range("Out of uint16 range");
-		}
-		port = z & 0xFFFF;
-	} catch(const std::exception& e) {
-		std::cerr << "Invalid port in server cfg (" << e.what() << ")" << std::endl;
-		setProp("port", "13374");
-	}
-	return port;
-}
-
-void Storage::setModPass(std::string s) {
-	setProp("modpass", std::move(s));
-}
-
-void Storage::setAdminPass(std::string s) {
-	setProp("adminpass", std::move(s));
+std::string_view Storage::getDefaultWorldName() const {
+	return getProp("server.worlds.default");
 }
 
 void Storage::setBindAddress(std::string s) {
-	setProp("bindto", std::move(s));
+	setProp("server.bindto", std::move(s));
 }
 
 void Storage::setBindPort(u16 p) {
-	setProp("port", std::to_string(p));
+	setProp("server.port", std::to_string(p));
+}
+
+void Storage::setDefaultWorldName(std::string s) {
+	setProp("server.worlds.default", std::move(s));
 }
 
 BansManager& Storage::getBansManager() {
@@ -408,3 +384,11 @@ BansManager& Storage::getBansManager() {
 std::tuple<std::string, std::string> Storage::getWorldStorageArgsFor(const std::string& worldName) {
 	return {worldDirPath + "/" + worldName, worldName};
 }
+
+void Storage::populateConfigFile() {
+	getOrSetProp("server.bindto", "0.0.0.0");
+	getOrSetProp("server.port", "13375");
+	getOrSetProp("server.worlds.folder", "world_data");
+	getOrSetProp("server.worlds.default", "main");
+}
+

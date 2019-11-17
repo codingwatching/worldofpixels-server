@@ -19,7 +19,7 @@ public:
 	using Pos = i32;
 	using ProtPos = i32;
 
-	static constexpr sz_t size = 256;
+	static constexpr sz_t size = 512;
 	static constexpr sz_t protectionAreaSize = 16;
 
 	// pc**2 = dimensions of the protection array for chunks
@@ -37,9 +37,10 @@ private:
 	const WorldStorage& ws;
 	PngImage data;
 	std::array<u32, pc * pc> protectionData; // split one chunk to protection cells
-	// with specific GIDs, or GGIDs (grouped groups IDs)
+	// with specific per-world, or general uvias roles
 	std::vector<u8> pngCache; // could get big
 	bool canUnload;
+	bool protectionDataEmpty; // only set to true if woPp chunk reader wasn't called
 	bool pngCacheOutdated;
 	bool pngFileOutdated;
 
@@ -61,11 +62,9 @@ public:
 
 	void updateLastActionTime();
 	std::chrono::steady_clock::time_point getLastActionTime() const;
-	
+
 	bool shouldUnload(bool) const;
 	void preventUnloading(bool);
 
-private:
-	void lockChunk();
-	void unlockChunk();
+	bool isChunkEmpty();
 };

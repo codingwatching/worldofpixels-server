@@ -38,6 +38,19 @@ bool WorldManager::verifyWorldName(const std::string& name) {
 	return true;
 }
 
+std::string_view WorldManager::getDefaultWorldName() const {
+	return s.getDefaultWorldName();
+}
+
+bool WorldManager::setDefaultWorldName(std::string str) {
+	if (!verifyWorldName(str)) {
+		return false;
+	}
+
+	s.setDefaultWorldName(std::move(str));
+	return true;
+}
+
 bool WorldManager::isLoaded(const std::string& name) const {
 	return worlds.find(name) != worlds.end();
 }

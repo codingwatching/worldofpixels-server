@@ -3,19 +3,36 @@
 #include <ConnectionManager.hpp>
 #include <WorldManager.hpp>
 
+#include <HttpData.hpp>
+
+#include <utils.hpp>
+
+#include <iostream>
+
 WorldChecker::WorldChecker(WorldManager& wm)
 : wm(wm) { }
 
-bool WorldChecker::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
-	auto search = ic.args.find("world");
-
-	// I know it's a static method, but the reference might be needed in the future
-	if (search == ic.args.end() || !wm.verifyWorldName(search->second)) {
+bool WorldChecker::preCheck(IncomingConnection& ic, HttpData hd) {
+	std::string_view url(hd.getUrl());
+	if (!url.size() || url[0] != '/') {
 		return false;
 	}
 
-	ic.ci.world = std::move(search->second);
-	ic.args.erase(search); // std::move might have emptied the string
-	// so just erase it from args
+	url.remove_prefix(1);
+	auto pos = url.find_first_of("/?");
+	if (pos != url.npos) {
+		url.remove_suffix(url.size() - pos);
+	}
+
+	std::string world(mkurldecoded_v(url));
+	if (!world.size()) {
+		world = wm.getDefaultWorldName();
+	}
+
+	if (!wm.verifyWorldName(world)) {
+		return false;
+	}
+
+	ic.ci.world = std::move(world);
 	return true;
 }

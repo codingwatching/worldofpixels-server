@@ -1,7 +1,12 @@
 #pragma once
 
+#include <optional>
+
+#include <Bucket.hpp>
 #include <Packet.hpp>
+
 #include <User.hpp>
+#include <UviasRank.hpp>
 #include <Player.hpp>
 #include <World.hpp>
 
@@ -15,6 +20,7 @@ enum tc : u8 {
 	USER_UPDATE,
 	SHOW_PLAYERS,
 	HIDE_PLAYERS,
+	WORLD_DATA,
 	WORLD_UPDATE,
 	TOOL_STATE,
 	CHAT_MESSAGE,
@@ -28,19 +34,24 @@ enum tc : u8 {
 
 using Cursor = std::tuple<Player::Id, World::Pos, World::Pos, Player::Step, Player::Tid>;
 using Pixel  = std::tuple<World::Pos, World::Pos, u8, u8, u8>;
+using Bucket = std::tuple<Bucket::Rate, Bucket::Per, Bucket::Allowance>;
 
 } // namespace net
 
 // Packet definitions, clientbound
 using AuthProgress = Packet<net::tc::AUTH_PROGRESS, std::type_index>;
-using AuthOk       = Packet<net::tc::AUTH_OK,       std::string, u64, std::string, bool>;
+// uid, username, total rep, rank id, rank name, super user, can self manage
+using AuthOk       = Packet<net::tc::AUTH_OK,       User::Id, std::string, User::Rep, UviasRank::Id, std::string, bool, bool>;
 using AuthError    = Packet<net::tc::AUTH_ERROR,    std::type_index>;
 
-using PlayerData  = Packet<net::tc::PLAYER_DATA,  net::Cursor>; // self player data
+// self cursor data, paint bucket, chat bucket, can chat, can modify world
+using PlayerData  = Packet<net::tc::PLAYER_DATA,  net::Cursor, net::Bucket, net::Bucket, bool, bool>;
 using UserUpdate  = Packet<net::tc::USER_UPDATE,  User::Id>;
 using PlayersShow = Packet<net::tc::SHOW_PLAYERS, std::vector<std::tuple<User::Id, net::Cursor>>>;
 using PlayersHide = Packet<net::tc::HIDE_PLAYERS, std::vector<Player::Id>>;
 
+// world name, motd, bg color, drawing restricted, owner
+using WorldData        = Packet<net::tc::WORLD_DATA,     std::string, std::string, u32, bool, std::optional<User::Id>>;
 using WorldUpdate      = Packet<net::tc::WORLD_UPDATE,   std::vector<net::Cursor>, std::vector<net::Pixel>>;
 #pragma message("Change Player class to Cursor")
 //using ToolState        = Packet<net::tc::TOOL_STATE,     Player::Id, >

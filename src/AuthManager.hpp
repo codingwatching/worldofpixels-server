@@ -1,69 +1,49 @@
 #pragma once
 
-#include <string>
+#include <utility>
 #include <array>
-#include <chrono>
-#include <vector>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <functional>
 #include <unordered_map>
 
+#include <UviasRank.hpp>
 #include <Session.hpp>
 #include <User.hpp>
 
 #include <explints.hpp>
 #include <shared_ptr_ll.hpp>
-#include <fwd_uWS.h>
 
-namespace std {
-	template <>
-	struct hash<std::array<u8, 16>> {
-		std::size_t operator()(const std::array<u8, 16>& k) const {
-			// very lazy hash, tokens are random so it's ok,
-			// assumes sizeof(std::size_t) <= 16
-            return *(reinterpret_cast<const std::size_t *>(k.data()));
-        }
-    };
-}
+class AsyncPostgres;
+class SessionChecker;
 
-class TimedCallbacks;
-
-// todo: user class must have session ref list
 class AuthManager {
-	static constexpr auto defaultInactiveSessionLifespan = std::chrono::hours(48); // 2 days
-	static constexpr auto defaultInactiveGuestSessionLifespan = defaultInactiveSessionLifespan / 2;
-
-	TimedCallbacks& tc;
-	std::unordered_map<std::array<u8, 16>, Session> sessions;
+	AsyncPostgres& uvdb;
+	std::unordered_map<UviasRank::Id, UviasRank> ranks;
+	std::unordered_map<std::string, ll::weak_ptr<Session>> sessions; // token as key
 	std::unordered_map<User::Id, ll::weak_ptr<User>> userCache;
-	std::chrono::minutes sessionLife;
-	std::chrono::minutes guestSessionLife;
-	u32 guestIdCounter;
-	u32 sessionTimer;
-	std::array<u8, 12> guestSalt;
 
 public:
-	AuthManager(TimedCallbacks&);
+	AuthManager(AsyncPostgres&);
 
-	void getOrLoadUser(User::Id, std::function<void(ll::shared_ptr<User>)>, bool load = true);
+	static std::optional<std::pair<u64, std::array<u8, 16>>> parseToken(std::string_view token);
 
-	// Returns nullptr if there is no session by this token
-	Session * getSession(std::array<u8, 16>);
-	Session * getSession(const char *, sz_t);
-	Session * getSession(const std::string&);
+	std::optional<UviasRank> getRank(UviasRank::Id) const;
+	void updateRank(UviasRank);
 
-	void createGuestSession(Ip, std::string ua, std::string lang,
-		std::function<void(std::array<u8, 16>, Session&)>);
+	ll::shared_ptr<User> getUser(User::Id);
+	void reloadUser(User::Id); // if name or any other thing changed
 
-	void createGoogleSession(Ip, std::string ua, std::string lang,
-		std::string gtoken, std::function<void(std::array<u8, 16>, Session&)>);
+	// Returns nullptr if there is no active session by this token
+	ll::shared_ptr<Session> getSession(std::string_view);
+	bool kickSession(std::string_view);
+	void forEachSession(std::function<void(const std::string&, ll::shared_ptr<Session>)>);
 
-	void forEachSession(std::function<void(const std::array<u8, 16>&, const Session&)>);
+	std::function<bool()> useSsoToken(std::string_view ssoToken, std::string_view serviceId, std::function<void(std::optional<std::string>, bool)>);
 
 private:
-	bool updateTimer();
+	std::function<bool()> loadSession(std::string_view, std::function<void(ll::shared_ptr<Session>)>);
 
-	static std::array<u8, 16> createRandomToken();
-	std::array<u8, 16> createGuestToken(Ip);
-
-	u64 generateGuestUserId();
+	friend SessionChecker;
 };

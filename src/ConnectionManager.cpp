@@ -3,10 +3,11 @@
 #include <Client.hpp>
 #include <ConnectionProcessor.hpp>
 #include <PacketDefinitions.hpp>
-#include <AuthManager.hpp>
-#include <Session.hpp>
 
 #include <utils.hpp>
+#include <HttpData.hpp>
+
+#include <iostream>
 
 #include <uWS.h>
 
@@ -20,66 +21,56 @@ ClosedConnection::ClosedConnection(IncomingConnection& ic)
   ip(ic.ip),
   wasClient(false) { }
 
-ConnectionManager::ConnectionManager(uWS::Hub& h, AuthManager& a, std::string protoName)
-: defaultGroup(h.getDefaultGroup<uWS::SERVER>()),
-  am(a) {
+ConnectionManager::ConnectionManager(uWS::Hub& h, std::string protoName)
+: defaultGroup(h.getDefaultGroup<uWS::SERVER>()) {
 	h.onConnection([this, pn{std::move(protoName)}] (uWS::WebSocket<uWS::SERVER> * ws, uWS::HttpRequest req) {
+		HttpData hd(&req);
 		// Maybe this could be moved on the upgrade handler, somehow
-		uWS::Header argHead(req.getHeader("sec-websocket-protocol", 22));
+		auto argHead = hd.getHeader("sec-websocket-protocol");
 		if (!argHead) {
-			ws->terminate();
+			ws->close(4000);
 			return;
 		}
 
-		auto args(tokenize(argHead.toString(), ','));
+		auto args(tokenize(*argHead, ','));
 		std::map<std::string, std::string> argList;
 
 		if (args.size() == 0 || args[0] != pn) {
-			ws->terminate();
+			ws->close(4001);
 			return;
 		}
 
 		for (auto& s : args) {
-			ltrim(s);
+			ltrim_v(s);
 			sz_t sep = s.find_first_of('+');
-			if (sep != std::string::npos) {
+			if (sep != std::string_view::npos) {
 				std::string str(s.substr(sep + 1));
 
 				try {
 					urldecode(str);
 				} catch (const std::exception& e) {
-					ws->terminate();
+					ws->close(4002);
 					return;
 				}
 
-				argList.emplace(s.substr(0, sep), std::move(str));
+				argList.emplace(std::string(s.substr(0, sep)), std::move(str));
 			}
-		}
-
-		auto search = argList.find("token");
-		if (search == argList.end()) {
-			ws->close(4000);
-			return;
 		}
 
 		auto addr = ws->getAddress();
 		Ip ip;
 		if (addr.family[0] == 'U' || Ip(addr.address).isLocal()) { // inefficient if using tcp
-			if (auto h = req.getHeader("x-real-ip", 9)) {
-				ip = Ip(h.toString());
+			if (auto h = hd.getHeader("x-real-ip")) {
+				ip = Ip::fromString(h->data(), h->size());
 			} else {
-				ws->close(4002);
+				ws->close(4003);
 				return;
 			}
 		} else {
 			ip = Ip(addr.address);
 		}
 
-		if (Session * sess = am.getSession(search->second)) {
-			handleIncoming(ws, *sess, std::move(argList), req, addr.address);
-		} else {
-			ws->close(4001);
-		}
+		handleIncoming(ws, std::move(argList), hd, ip);
 	});
 
 	h.onDisconnection([this] (uWS::WebSocket<uWS::SERVER> * ws, int c, const char * msg, sz_t len) {
@@ -93,6 +84,9 @@ ConnectionManager::ConnectionManager(uWS::Hub& h, AuthManager& a, std::string pr
 			if (ic != pending.end()) {
 				// will get deleted once the current async processor finishes
 				ic->cancelled = true;
+				if (ic->onDisconnect) {
+					ic->onDisconnect();
+				}
 			}
 		} else {
 			handleDisconnect(*cl);
@@ -120,19 +114,19 @@ void ConnectionManager::forEachProcessor(std::function<void(ConnectionProcessor&
 	}
 }
 
-void ConnectionManager::handleIncoming(uWS::WebSocket<uWS::SERVER> * ws, Session& session,
-		std::map<std::string, std::string> args, uWS::HttpRequest req, Ip ip) {
+void ConnectionManager::handleIncoming(uWS::WebSocket<uWS::SERVER> * ws,
+		std::map<std::string, std::string> args, HttpData hd, Ip ip) {
 	// can be optimized
-	pending.push_front({ConnectionInfo(), session,  ws, std::move(args), processors.begin(), pending.end(), ip, false});
+	pending.push_front({ConnectionInfo(), ws, std::move(args), processors.begin(), pending.end(), ip, nullptr, false});
 	auto ic = pending.begin();
 	ic->it = ic;
 
 	for (auto it = processors.begin(); it != processors.end(); ++it) {
-		if (!(*it)->preCheck(*ic, req)) {
-			AuthError::one(ws, typeid(*it->get()));
+		if (!(*it)->preCheck(*ic, hd)) {
+			const std::type_info& ti = typeid(*it->get());
 
 			ic->nextProcessor = std::next(it);
-			handleFail(*ic);
+			handleFail(*ic, ti);
 			handleDisconnect(*ic, false);
 			return;
 		}
@@ -149,6 +143,9 @@ void ConnectionManager::handleAsync(IncomingConnection& ic) {
 
 			// not safe to use ic after calling callback
 			pr->asyncCheck(ic, [this, &ic, &pr] (bool ok) {
+				// the disconnect handler is only used to signal and handle
+				// disconnection to the current asyncCheck.
+				ic.onDisconnect = nullptr;
 				if (ok && !ic.cancelled) {
 					handleAsync(ic);
 					return;
@@ -156,8 +153,7 @@ void ConnectionManager::handleAsync(IncomingConnection& ic) {
 
 				// is true if socket closed
 				if (!ic.cancelled) {
-					AuthError::one(ic.ws, typeid(*pr.get()));
-					handleFail(ic);
+					handleFail(ic, typeid(*pr.get()));
 				}
 
 				// the cancelled flag is set to true if we called handleFail
@@ -170,24 +166,28 @@ void ConnectionManager::handleAsync(IncomingConnection& ic) {
 	handleEnd(ic);
 }
 
-void ConnectionManager::handleFail(IncomingConnection& ic) {
-	ic.ws->close();
+void ConnectionManager::handleFail(IncomingConnection& ic, const std::type_info& ti) {
+	AuthError::one(ic.ws, ti);
+	ic.ws->close(4004);
 }
 
 void ConnectionManager::handleEnd(IncomingConnection& ic) {
 	for (auto& p : processors) {
 		if (!p->endCheck(ic)) {
-			AuthError::one(ic.ws, typeid(*p.get()));
-			handleFail(ic);
+			handleFail(ic, typeid(*p.get()));
 			handleDisconnect(ic, true);
 			return;
 		}
 	}
 
-	User& u = ic.session.getUser();
-	AuthOk::one(ic.ws, ic.ci.world, u.getId(), u.getUsername(), u.isGuest());
-
 	Client * cl = clientTransformer(ic);
+
+	if (!cl) {
+		handleFail(ic, typeid(Client));
+		handleDisconnect(ic, true);
+		return;
+	}
+
 	ic.ws->setUserData(cl);
 	pending.erase(ic.it);
 

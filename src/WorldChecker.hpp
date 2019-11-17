@@ -10,5 +10,5 @@ class WorldChecker : public ConnectionProcessor {
 public:
 	WorldChecker(WorldManager&);
 
-	bool preCheck(IncomingConnection&, uWS::HttpRequest&);
+	bool preCheck(IncomingConnection&, HttpData);
 };

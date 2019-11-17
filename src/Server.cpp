@@ -1,13 +1,17 @@
 #include "Server.hpp"
 
+#include <User.hpp>
+#include <UviasRank.hpp>
 #include <Client.hpp>
 #include <Player.hpp>
 #include <WorldManager.hpp>
 #include <BansManager.hpp>
 #include <World.hpp>
+#include <PacketDefinitions.hpp>
 
 #include <ConnectionCounter.hpp>
 #include <BanChecker.hpp>
+#include <SessionChecker.hpp>
 #include <WorldChecker.hpp>
 #include <HeaderChecker.hpp>
 #include <CaptchaChecker.hpp>
@@ -17,6 +21,8 @@
 #include <utility>
 #include <exception>
 #include <new>
+
+#include <nlohmann/json.hpp>
 
 constexpr auto asyncDeleter = [] (uS::Async * a) {
 	a->close();
@@ -30,37 +36,35 @@ Server::Server(std::string basePath)
   bm(s.getBansManager()),
   tb(h.getLoop()), // XXX: this should get destructed before other users of the taskbuffer, like WorldManager. what do?
   tc(h.getLoop()),
-  am(tc),
-  wm(tb, tc, s),
-  conn(h, am, "OWOP"),
-  api(h, am),
-  hcli(h.getLoop()),
   ap(h.getLoop(), tc),
+  am(ap),
+  wm(tb, tc, s),
+  conn(h, "OWOP"),
+  api(h),
+  ac(h.getLoop()),
   pr(h, [] (Client& c) { c.updateLastActionTime(); }), // for every packet
   saveTimer(0),
   statsTimer(0) {
-	std::cout << "Admin password set to: " << s.getAdminPass() << "." << std::endl;
-	std::cout << "Moderator password set to: " << s.getModPass() << "." << std::endl;
-
 	stopCaller->setData(this);
 	tb.setWorkerThreadSchedulingPriorityToLowestPossibleValueAllowedByTheOperatingSystem();
 
 	registerEndpoints();
 	registerPackets();
 
-	ap.onNotification([] (auto notif) {
+	ap.onNotification([this] (auto notif) {
 		std::cout << "[Postgre." << notif.bePid() << "/" << notif.channelName() << "]: " << notif.extra() << std::endl;
+
+		auto search = notifHandlers.find(notif.channelName());
+		if (search != notifHandlers.end()) {
+			search->second(notif.extra());
+		}
 	});
 
 	ap.onConnectionStateChange([this] (auto state) {
 		switch (state) {
 			case CONNECTION_OK:
 				std::cout << "Connected to DB!" << std::endl;
-				ap.query<true>("LISTEN uv_ban")
-				.then([] (auto r) {
-					if (!r) std::cout << "[FAIL] ";
-					std::cout << "Listening to uv_ban notifs" << std::endl;
-				});
+				registerNotifs();
 				break;
 
 			case CONNECTION_BAD:
@@ -69,56 +73,22 @@ Server::Server(std::string basePath)
 		}
 	});
 
-	ap.connect();
-
-	// still not connected, however, you can query:
-	ap.query("DELETE FROM friends")
-	.then([] (auto r) {
-		if (!r) std::cout << "[FAIL] ";
-		std::cout << "Cleaned table friends" << std::endl;
+	ap.connect({
+		{ "dbname", "uvias" }
 	});
+	
+	ap.query<9>("SELECT accounts.set_service_info($1::VARCHAR(8), $2::VARCHAR(64), $3::VARCHAR(64), $4::VARCHAR(128), $5::VARCHAR(128), $6::INT, $7::BOOL)",
+			"owop", "Our World of Pixels (dev)", "dev.ourworldofpixels.com", "/api/sso", "/", ::getpid(), true);
 
-	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ($1, $2::int4, $3::bool, $4)", "John", 18, true, "Test description")
-	.then([] (auto r) {
-		if (!r) std::cout << "[FAIL] ";
-		std::cout << "query 1 cb exec" << std::endl;
-	});
-
-	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ($1, $2::int4, $3::bool, $4)", "Sarah", 17, false, std::nullopt)
-	.then([] (auto r) {
-		if (!r) std::cout << "[FAIL] ";
-		std::cout << "query 2 cb exec" << std::endl;
-	});
-
-	ap.query("INSERT INTO friends (name, age, male, descript) VALUES ($1, $2::int4, $3::bool, $4)",
-			"Alex';--", 18, nullptr, "Test description 3")
-	.then([] (auto r) {
-		if (!r) {
-			std::cout << "[FAIL] ";
-		}
-
-		std::cout << "query 3 cb exec" << std::endl;
-	});
-
-	ap.query("SELECT * FROM friends")
-	.then([] (auto r) {
-		if (!r) std::cout << "[FAIL] ";
-		std::cout << "query 4 cb exec" << std::endl;
-
-		r.forEach([] (std::string name, int age, std::optional<bool> m, std::optional<std::string> desc) {
-			std::cout << "-> " << name << "," << age << ","
-				<< (m ? (*m?"1":"0") : "null") << ","
-				<< (desc ? *desc : std::string("null")) << std::endl;
-		});
-	});
-
-	conn.addToBeg<ProxyChecker>(hcli, tc).setState(ProxyChecker::State::OFF);
-	conn.addToBeg<CaptchaChecker>(hcli).setState(CaptchaChecker::State::OFF);
+	//conn.addToBeg<ProxyChecker>(pcra).setState(ProxyChecker::State::OFF);
+	//conn.addToBeg<CaptchaChecker>(rcra).setState(CaptchaChecker::State::OFF);
+	conn.addToBeg<BanChecker>(bm); // check bans after session is obtained -- allows user-specific bans
+	conn.addToBeg<SessionChecker>(am);
 	conn.addToBeg<WorldChecker>(wm);
-	/*conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>{
+	conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>{
 		"https://ourworldofpixels.com",
-	});*/
-	conn.addToBeg<BanChecker>(bm);
+		"https://dev.ourworldofpixels.com"
+	});
 	conn.addToBeg<ConnectionCounter>().setCounterUpdateFunc([this] (ConnectionCounter& cc) {
 		if (statsTimer) { // if not 0
 			tc.resetTimer(statsTimer);
@@ -135,11 +105,22 @@ Server::Server(std::string basePath)
 	});
 
 	conn.onSocketChecked([this] (IncomingConnection& ic) -> Client * {
+		if (!ic.ci.session) {
+			return nullptr;
+		}
+
+		User& u = ic.ci.session->getUser();
+		const UviasRank& uvr = u.getUviasRank();
+
+		AuthOk::one(ic.ws,
+			u.getId(), u.getUsername(), u.getTotalRep(),
+			uvr.getId(), std::string(uvr.getName()), uvr.isSuperUser(), uvr.canSelfManage());
+
 		World& w = wm.getOrLoadWorld(ic.ci.world);
 		Player::Builder pb;
 		w.configurePlayerBuilder(pb);
 
-		return new Client(ic.ws, ic.session, ic.ip, pb);
+		return new Client(ic.ws, std::move(ic.ci.session), ic.ip, pb);
 	});
 
 	h.getDefaultGroup<uWS::SERVER>().startAutoPing(30000);
@@ -151,7 +132,7 @@ bool Server::listenAndRun() {
 
 	const char * host = addr.size() > 0 ? addr.c_str() : nullptr;
 
-	if (!h.listen(host, port, nullptr, uS::ListenOptions::ONLY_IPV4)) {
+	if (!h.listen(host, port)) {
 		unsafeStop();
 		std::cerr << "Couldn't listen on " << addr << ":" << port << "!" << std::endl;
 		return false;
@@ -200,6 +181,48 @@ void Server::kickInactivePlayers() {
 		if (c.inactiveKickEnabled() && now - c.getLastActionTime() > std::chrono::hours(1)) {
 			c.close();
 		}
+	});
+}
+
+void Server::registerNotifs() {
+	notifHandlers.clear();
+
+	const auto dbListen = [this] (std::string name, auto cb) {
+		ap.query<999>("LISTEN " + name)
+		->then([name] (auto r) {
+			if (!r) std::cout << "[FAIL] ";
+			std::cout << "Listening to " << name << " notifs" << std::endl;
+		});
+
+		notifHandlers.emplace(name, std::move(cb));
+	};
+
+	const auto rankUpdate = [this] (AsyncPostgres::Result r) {
+		r.forEach([this] (int id, std::string name, bool superUser, bool selfManage) {
+			am.updateRank(UviasRank(id, std::move(name), superUser, selfManage));
+		});
+	};
+
+	dbListen("uv_kick", [this] (auto) { });
+
+	dbListen("uv_rep_upd", [this] (auto) { });
+
+	dbListen("uv_user_upd", [this] (auto) { });
+	dbListen("uv_user_del", [this] (auto) { });
+
+	dbListen("uv_rank_upd", [this, rankUpdate] (auto data) {
+		nlohmann::json j = nlohmann::json::parse(data);
+		int id = j["id"].get<int>();
+		std::cout << "Rank updated: " << id << std::endl;
+
+		ap.query<10>("SELECT id, name, admin_superuser, self_manage FROM accounts.ranks WHERE id = $1::INT", id)
+		->then(rankUpdate);
+	});
+
+	ap.query<10>("SELECT id, name, admin_superuser, self_manage FROM accounts.ranks")
+	->then([this, rankUpdate] (auto r) {
+		std::cout << "Ranks loaded: " << r.size() << std::endl;
+		rankUpdate(std::move(r));
 	});
 }
 

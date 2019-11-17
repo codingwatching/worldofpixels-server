@@ -1,6 +1,7 @@
 #include "ConnectionCounter.hpp"
 
 #include <ConnectionManager.hpp>
+#include <HttpData.hpp>
 
 #include <nlohmann/json.hpp>
 
@@ -25,7 +26,7 @@ void ConnectionCounter::setCounterUpdateFunc(std::function<void(ConnectionCounte
 	updatesFunc = std::move(f);
 }
 
-bool ConnectionCounter::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
+bool ConnectionCounter::preCheck(IncomingConnection& ic, HttpData) {
 	++total;
 	++currentActive;
 	++currentChecking;
@@ -41,7 +42,7 @@ bool ConnectionCounter::preCheck(IncomingConnection& ic, uWS::HttpRequest&) {
 void ConnectionCounter::connected(Client&) {
 	++totalChecked;
 	--currentChecking;
-	
+
 	if (updatesFunc) {
 		updatesFunc(*this);
 	}
@@ -57,7 +58,7 @@ void ConnectionCounter::disconnected(ClosedConnection& c) {
 	if (--search->second == 0) { // guaranteed to exist and > 0
 		connCountPerIp.erase(search);
 	}
-	
+
 	if (updatesFunc) {
 		updatesFunc(*this);
 	}
