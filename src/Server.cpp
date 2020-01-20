@@ -46,7 +46,7 @@ Server::Server(std::string basePath)
   saveTimer(0),
   statsTimer(0) {
 	stopCaller->setData(this);
-	tb.setWorkerThreadSchedulingPriorityToLowestPossibleValueAllowedByTheOperatingSystem();
+	tb.setWorkerThreadsSchedulingPriorityToLowestPossibleValueAllowedByTheOperatingSystem();
 
 	registerEndpoints();
 	registerPackets();
@@ -76,7 +76,7 @@ Server::Server(std::string basePath)
 	ap.connect({
 		{ "dbname", "uvias" }
 	});
-	
+
 	ap.query<9>("SELECT accounts.set_service_info($1::VARCHAR(8), $2::VARCHAR(64), $3::VARCHAR(64), $4::VARCHAR(128), $5::VARCHAR(128), $6::INT, $7::BOOL)",
 			"owop", "Our World of Pixels (dev)", "dev.ourworldofpixels.com", "/api/sso", "/", ::getpid(), true);
 
@@ -145,6 +145,7 @@ bool Server::listenAndRun() {
 		if (wm.saveAll()) {
 			std::cout << "Worlds saved." << std::endl;
 		}
+		
 		return true;
 	}, 900000);
 

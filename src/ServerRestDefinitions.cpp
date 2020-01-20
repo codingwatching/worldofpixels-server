@@ -103,16 +103,18 @@ void Server::registerEndpoints() {
 		.path("view")
 		.var()
 		.var()
-	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName, i32 x, i32 y) {
-		//std::cout << "[" << j << "]" << worldName << ","<< x << "," << y << std::endl;
-		if (!wm.verifyWorldName(worldName)) {
+		/*.var()*/
+	.end([this] (ll::shared_ptr<Request> req, std::string_view, std::string worldName, i32 x, i32 y/*, u8 downscaling*/) {
+		if (!wm.verifyWorldName(worldName)/* || downscaling > 16 || downscaling == 0
+				|| (downscaling & (downscaling - 1)) != 0*/) { // not power of 2
 			req->writeStatus("400 Bad Request");
 			req->end();
 			return;
 		}
 
 		if (!wm.isLoaded(worldName)) {
-			// nginx is supposed to serve unloaded worlds and chunks.
+			// you can't view worlds which are not loaded...
+			// TODO: ...that you're not on?
 			req->writeStatus("404 Not Found");
 			req->end();
 			return;
@@ -121,7 +123,7 @@ void Server::registerEndpoints() {
 		World& world = wm.getOrLoadWorld(worldName);
 
 		// will encode the png in another thread if necessary and end the request when done
-		world.sendChunk(x, y, std::move(req));
+		world.sendChunk(x, y, /*downscaling,*/ std::move(req));
 	});
 
 	api.on(ApiProcessor::MPOST) // Switch world

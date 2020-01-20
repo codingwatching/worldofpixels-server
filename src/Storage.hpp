@@ -27,6 +27,12 @@ union twoi32 {
 
 bool operator<(const twoi32& a, const twoi32& b);
 
+enum EChunkFormat {
+	C_NONE = 0,
+	C_PXR,
+	C_PNG
+};
+
 class WorldStorage : PropertyReader {
 	const std::string worldDir; // path for the world files
 	const std::string worldName;
@@ -48,7 +54,7 @@ public:
 	const std::string& getWorldName() const;
 	const std::string& getWorldDir() const;
 	std::string getChunkFilePath(i32 x, i32 y) const;
-	bool isChunkOnDisk(i32 x, i32 y) const;
+	EChunkFormat isChunkOnDisk(i32 x, i32 y) const;
 
 	bool save();
 

@@ -69,8 +69,15 @@ Chunk::Chunk(Pos x, Pos y, const WorldStorage& ws)
 		return rle::compress(protectionData.data(), protectionData.size());
 	});
 
+	std::ifstream ch(ws.getChunkFilePath(x, y), std::ios::binary | std::ios::ate);
+	if (ch) {
+		sz_t size = ch.tellg();
+		ch.seekg(0);
+		pngCache.resize(size);
+		ch.read(reinterpret_cast<char *>(pngCache.data()), size);
+		pngCacheOutdated = false;
 
-	if (data.readFile(ws.getChunkFilePath(x, y))) {
+		data.readFileOnMem(pngCache.data(), pngCache.size());
 		if (!readerCalled) {
 			protectionData.fill(0);
 			protectionDataEmpty = true;

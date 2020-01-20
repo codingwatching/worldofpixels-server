@@ -13,6 +13,7 @@
 #include <iostream>
 #include <utility>
 #include <algorithm>
+#include <fstream>
 
 #include <uWS.h>
 #include <nlohmann/json.hpp>
@@ -267,14 +268,30 @@ bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request> req) {
 		return true;
 	}
 
-	if (!isChunkOnDisk(x, y)) { // if the chunk doesn't exist, don't load it
-		req->writeStatus("204 No Content");
-		req->end();
-		return true;
+	EChunkFormat fmt = isChunkOnDisk(x, y);
+	switch (fmt) {
+		case C_NONE: // if the chunk doesn't exist, don't load it
+			req->writeStatus("204 No Content");
+			req->end();
+			return true;
+
+		case C_PNG: { // if it's a PNG, just send it whole. TODO: actually stream, instead of wasting memory
+			std::ifstream ch(getChunkFilePath(x, y), std::ios::binary | std::ios::ate);
+			if (!ch) {
+				// ok what
+				break;
+			}
+
+			sz_t size = ch.tellg();
+			ch.seekg(0);
+			auto data(std::make_unique<char[]>(size));
+			ch.read(data.get(), size);
+			req->end(data.get(), size);
+			return true;
+		} break;
 	}
 
 	// will load the chunk if unloaded
-	// TODO: Stream file from the server, instead of loading it
 	Chunk& chunk = getChunk(x, y);
 
 	if (!chunk.isPngCacheOutdated()) {
@@ -298,8 +315,6 @@ bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request> req) {
 				if (!req->isCancelled()) { // TODO: Prepared HTTP response?
 					//req->writeHeader("Content-Type", "image/png");
 					req->end(reinterpret_cast<const char *>(d.data()), d.size());
-				} else {
-					std::cout << "Didn't send, request was cancelled" << std::endl;
 				}
 			}
 

@@ -76,9 +76,16 @@ std::string WorldStorage::getChunkFilePath(i32 x, i32 y) const {
 	return worldDir + "/r." + std::to_string(x) + "." + std::to_string(y) + ".png";
 }
 
-bool WorldStorage::isChunkOnDisk(i32 x, i32 y) const {
+EChunkFormat WorldStorage::isChunkOnDisk(i32 x, i32 y) const {
 	// xxx: doesnt work right if chunk is less than 512x512
-	return remainingOldClusters.find(twoi32{x, y}) != remainingOldClusters.end() || fileExists(worldDir + "/r." + std::to_string(x) + "." + std::to_string(y) + ".png");
+	static_assert(Chunk::size == 512, "Chunk::size is not 512, this function won't work");
+	if (remainingOldClusters.find(twoi32{x, y}) != remainingOldClusters.end()) {
+		return C_PXR;
+	} else if (fileExists(worldDir + "/r." + std::to_string(x) + "." + std::to_string(y) + ".png")) {
+		return C_PNG;
+	}
+
+	return C_NONE;
 }
 
 bool WorldStorage::save() {
@@ -324,7 +331,7 @@ void WorldStorage::loadProtectionData() {
 				}
 
 				i++;
-				if (!(i % 2048) || i == itemsonfile) {
+				if (!(i % 65536) || i == itemsonfile) {
 					std::cout << "Sort progress: " << i << "/" << itemsonfile << " (" << (i * 100 / itemsonfile) << "%)" << std::endl;
 				}
 			}
