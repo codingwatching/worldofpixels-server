@@ -22,6 +22,14 @@ bool operator<(const twoi32& a, const twoi32& b) {
 	return a.pos < b.pos;
 }
 
+static twoi32 mk_twoi32(i32 x, i32 y) {
+	twoi32 u;
+	u.x = x;
+	u.y = y;
+
+	return u;
+}
+
 WorldStorage::WorldStorage(std::string worldDir, std::string worldName)
 : PropertyReader(worldDir + "/props.txt"),
   worldDir(std::move(worldDir)),
@@ -79,7 +87,7 @@ std::string WorldStorage::getChunkFilePath(i32 x, i32 y) const {
 EChunkFormat WorldStorage::isChunkOnDisk(i32 x, i32 y) const {
 	// xxx: doesnt work right if chunk is less than 512x512
 	static_assert(Chunk::size == 512, "Chunk::size is not 512, this function won't work");
-	if (remainingOldClusters.find(twoi32{x, y}) != remainingOldClusters.end()) {
+	if (remainingOldClusters.find(mk_twoi32(x, y)) != remainingOldClusters.end()) {
 		return C_PXR;
 	} else if (fileExists(worldDir + "/r." + std::to_string(x) + "." + std::to_string(y) + ".png")) {
 		return C_PNG;
@@ -111,7 +119,7 @@ u16 WorldStorage::getPixelRate() {
 }
 
 RGB_u WorldStorage::getBackgroundColor() const {
-	RGB_u clr = {255, 255, 255, 255};
+	RGB_u clr = {.rgb = 0xFFFFFFFF};
 	if (hasProp("bgcolor")) try {
 		std::string s(getProp("bgcolor"));
 		if (s.compare(0, 2, "0x") != 0) {

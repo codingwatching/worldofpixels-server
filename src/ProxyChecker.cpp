@@ -11,7 +11,7 @@
 
 #include <nlohmann/json.hpp>
 
-static void to_json(nlohmann::json& j, const ProxyChecker::State s) {
+static void to_json(nlohmann::json& j, const ProxyChecker::State s) { // @suppress("Unused static function")
 	switch (static_cast<int>(s)) { // it looks very nice, doesn't it?
 		case static_cast<int>(ProxyChecker::State::ALL):
 			j = "ALL";

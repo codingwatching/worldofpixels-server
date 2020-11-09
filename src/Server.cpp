@@ -21,6 +21,7 @@
 #include <utility>
 #include <exception>
 #include <new>
+#include <initializer_list>
 
 #include <nlohmann/json.hpp>
 
@@ -70,6 +71,9 @@ Server::Server(std::string basePath)
 			case CONNECTION_BAD:
 				std::cout << "Disconnected from DB!" << std::endl;
 				break;
+				
+			default:
+				break;
 		}
 	});
 
@@ -85,10 +89,10 @@ Server::Server(std::string basePath)
 	conn.addToBeg<BanChecker>(bm); // check bans after session is obtained -- allows user-specific bans
 	conn.addToBeg<SessionChecker>(am);
 	conn.addToBeg<WorldChecker>(wm);
-	conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>{
+	conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>({
 		"https://ourworldofpixels.com",
 		"https://dev.ourworldofpixels.com"
-	});
+	}));
 	conn.addToBeg<ConnectionCounter>().setCounterUpdateFunc([this] (ConnectionCounter& cc) {
 		if (statsTimer) { // if not 0
 			tc.resetTimer(statsTimer);
@@ -204,12 +208,12 @@ void Server::registerNotifs() {
 		});
 	};
 
-	dbListen("uv_kick", [this] (auto) { });
+	dbListen("uv_kick", [] (auto) { });
 
-	dbListen("uv_rep_upd", [this] (auto) { });
+	dbListen("uv_rep_upd", [] (auto) { });
 
-	dbListen("uv_user_upd", [this] (auto) { });
-	dbListen("uv_user_del", [this] (auto) { });
+	dbListen("uv_user_upd", [] (auto) { });
+	dbListen("uv_user_del", [] (auto) { });
 
 	dbListen("uv_rank_upd", [this, rankUpdate] (auto data) {
 		nlohmann::json j = nlohmann::json::parse(data);
@@ -221,7 +225,7 @@ void Server::registerNotifs() {
 	});
 
 	ap.query<10>("SELECT id, name, admin_superuser, self_manage FROM accounts.ranks")
-	->then([this, rankUpdate] (auto r) {
+	->then([rankUpdate] (auto r) {
 		std::cout << "Ranks loaded: " << r.size() << std::endl;
 		rankUpdate(std::move(r));
 	});

@@ -307,7 +307,7 @@ bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request> req) {
 
 		search = ongoingChunkRequests.emplace(std::piecewise_construct,
 			std::forward_as_tuple(k),
-			std::forward_as_tuple(std::initializer_list<ll::shared_ptr<Request>>{std::move(req)})).first;
+			std::forward_as_tuple(std::initializer_list<ll::shared_ptr<Request>>({std::move(req)}))).first;
 
 		auto end = [this, search, &chunk] (TaskBuffer& tb) {
 			const auto& d = chunk.getPngData();

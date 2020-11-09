@@ -55,7 +55,7 @@ bool installSignalHandler() {
 
 int main(int argc, char * argv[]) {
 	std::cout << "Starting server..." << std::endl;
-
+	
 	std::set_new_handler(outOfMemoryHandler);
 
 	if (!installSignalHandler()) {
