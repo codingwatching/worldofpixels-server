@@ -94,9 +94,9 @@ Chunk::Chunk(Pos x, Pos y, const WorldStorage& ws)
 Chunk::~Chunk() {
 	if (isChunkEmpty()) {
 		std::string fpath(ws.getChunkFilePath(x, y));
-		if (int err = std::remove(fpath.c_str())) {
+		if (std::remove(fpath.c_str())) {
 			std::string s("Couldn't delete chunk file (" + fpath + ")");
-			std:perror(s.c_str());
+			std::perror(s.c_str());
 		}
 
 		return;

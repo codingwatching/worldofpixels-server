@@ -87,7 +87,7 @@ ll::shared_ptr<User> AuthManager::getUser(User::Id uid) {
 	auto it = userCache.find(uid);
 	if (it != userCache.end()) {
 		if (auto usr = it->second.lock()) {
-			return std::move(usr);
+			return usr;
 		} else {
 			// pointer expired, delete
 			userCache.erase(it);
@@ -102,7 +102,7 @@ ll::shared_ptr<Session> AuthManager::getSession(std::string_view tok) {
 	auto it = sessions.find(std::string(tok));
 	if (it != sessions.end()) {
 		if (auto sess = it->second.lock()) {
-			return std::move(sess);
+			return sess;
 		} else {
 			// pointer expired, delete
 			sessions.erase(it);

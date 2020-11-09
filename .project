@@ -3,6 +3,8 @@
 	<name>cpp-owop-server</name>
 	<comment></comment>
 	<projects>
+		<project>naga-utils</project>
+		<project>uWebSockets</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

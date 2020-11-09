@@ -175,7 +175,7 @@ void WorldStorage::convertNext() {
 
 void WorldStorage::maybeConvertChunk(Chunk::Pos x, Chunk::Pos y) {
 	int times = 512 / Chunk::size; // assuming result is power of 2
-	maybeConvert(x >> times - 1, y >> times - 1);
+	maybeConvert(x >> (times - 1), y >> (times - 1));
 }
 
 void WorldStorage::maybeConvert(i32 x, i32 y) {
@@ -202,7 +202,7 @@ void WorldStorage::maybeConvert(i32 x, i32 y) {
 		buf = std::make_unique<u8[]>(size);
 		file.read((char*)buf.get(), size);
 		file.close();
-		if (int err = std::remove(name.c_str())) {
+		if (std::remove(name.c_str())) {
 			std::string e("Couldn't delete old cluster file " + name);
 			std::perror(e.c_str());
 		}
@@ -262,8 +262,8 @@ void WorldStorage::maybeConvert(i32 x, i32 y) {
 					u16 pTimes = 16 / Chunk::protectionAreaSize;
 
 
-					u16 x = p.x * pTimes & Chunk::pc - 1;
-					u16 y = p.y * pTimes & Chunk::pc - 1;
+					u16 x = p.x * pTimes & (Chunk::pc - 1);
+					u16 y = p.y * pTimes & (Chunk::pc - 1);
 
 					for (int k = 0; k < pTimes; k++) {
 						for (int l = 0; l < pTimes; l++) {

@@ -1,9 +1,0 @@
-[submodule "uWebSockets"]
-	path = lib/uWebSockets
-	url = https://github.com/uWebSockets/uWebSockets
-[submodule "lib/json"]
-	path = lib/json
-	url = https://github.com/nlohmann/json
-[submodule "lib/naga-utils"]
-	path = lib/naga-utils
-	url = uvias.com:~/workspace/naga-utils/

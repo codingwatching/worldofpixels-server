@@ -18,8 +18,8 @@ Player::Player(Client& c, World& w, u32 pid, World::Pos startX, World::Pos start
   playerId(pid),
   x(startX),
   y(startY),
-  paintLimiter(std::move(pL)),
   chatLimiter(std::move(cL)),
+  paintLimiter(std::move(pL)),
   chatAllowed(chat), // TODO: get from world
   cmdsAllowed(cmds),
   modifyWorldAllowed(mod),

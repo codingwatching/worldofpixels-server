@@ -289,6 +289,9 @@ bool World::sendChunk(Chunk::Pos x, Chunk::Pos y, ll::shared_ptr<Request> req) {
 			req->end(data.get(), size);
 			return true;
 		} break;
+
+		default:
+			break;
 	}
 
 	// will load the chunk if unloaded
