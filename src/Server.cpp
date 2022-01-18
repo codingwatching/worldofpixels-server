@@ -22,12 +22,19 @@
 #include <exception>
 #include <new>
 #include <initializer_list>
+#include <string_view>
 
 #include <nlohmann/json.hpp>
 
 constexpr auto asyncDeleter = [] (uS::Async * a) {
 	a->close();
 };
+
+std::string_view getEnvOr(const char * env_var, std::string_view def) {
+	const char * env_val = std::getenv(env_var);
+	auto val = env_val ? std::string_view{env_val} : def;
+	return val;
+}
 
 Server::Server(std::string basePath)
 : startupTime(std::chrono::steady_clock::now()),
@@ -76,23 +83,41 @@ Server::Server(std::string basePath)
 				break;
 		}
 	});
+	
+	if (const char *host = std::getenv("DB_HOST")) {
+		const char *user = std::getenv("DB_USER");
+		const char *pass = std::getenv("DB_PASSWORD");
+		ap.connect({
+			{"host", host},
+			 {"user", user},
+			 {"password", pass},
+			 { "dbname", "uvias" }
+		});
+	} else {
+		ap.connect({{ "dbname", "uvias" }});
+	}
 
-	ap.connect({
-		{ "dbname", "uvias" }
-	});
+	std::string domain(getEnvOr("API_HOST",
+#ifdef DEBUG
+								"dev."
+#endif								
+								"ourworldofpixels.com"));
+	std::cout << "Domain: " << domain << std::endl;
 
 	ap.query<9>("SELECT accounts.set_service_info($1::VARCHAR(8), $2::VARCHAR(64), $3::VARCHAR(64), $4::VARCHAR(128), $5::VARCHAR(128), $6::INT, $7::BOOL)",
-			"owop", "Our World of Pixels (dev)", "dev.ourworldofpixels.com", "/api/sso", "/", ::getpid(), true);
+			"owop", "Our World of Pixels (dev)", domain, "/api/sso", "/", ::getpid(), domain != "ourworldofpixels.com");
 
 	//conn.addToBeg<ProxyChecker>(pcra).setState(ProxyChecker::State::OFF);
 	//conn.addToBeg<CaptchaChecker>(rcra).setState(CaptchaChecker::State::OFF);
 	conn.addToBeg<BanChecker>(bm); // check bans after session is obtained -- allows user-specific bans
 	conn.addToBeg<SessionChecker>(am);
 	conn.addToBeg<WorldChecker>(wm);
+#ifndef DEBUG
 	conn.addToBeg<HeaderChecker>(std::initializer_list<std::string>({
 		"https://ourworldofpixels.com",
 		"https://dev.ourworldofpixels.com"
 	}));
+#endif
 	conn.addToBeg<ConnectionCounter>().setCounterUpdateFunc([this] (ConnectionCounter& cc) {
 		if (statsTimer) { // if not 0
 			tc.resetTimer(statsTimer);

@@ -5,12 +5,12 @@ SRC_FILES = $(call rwildcard, src/, *.cpp)
 OBJ_FILES = $(SRC_FILES:src/%.cpp=build/%.o)
 DEP_FILES = $(OBJ_FILES:.o=.d)
 
-TARGET    = out
+TARGET    = owopd
 
 OPT_REL   = -O2
 LD_REL    =
 
-OPT_DBG  = -Og -g
+OPT_DBG  = -Og -g -DDEBUG=1
 LD_DBG   =
 
 OPT_UDBG   = -Og -g -fsanitize=address

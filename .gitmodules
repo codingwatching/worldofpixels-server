@@ -1,0 +1,7 @@
+[submodule "lib/naga-utils"]
+	path = lib/naga-utils
+	url = https://github.com/nagalun/naga-utils
+[submodule "lib/uWebSockets"]
+	path = lib/uWebSockets
+	url = https://github.com/uNetworking/uWebSockets
+	branch = v0.14

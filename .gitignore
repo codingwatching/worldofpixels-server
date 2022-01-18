@@ -2,7 +2,9 @@ src/keys.hpp
 world_data
 build
 out
+owopd
 prepareUpload.sh
+remote-pgres.sh
 bans.json
 props.txt
 archive

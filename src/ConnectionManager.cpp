@@ -59,7 +59,11 @@ ConnectionManager::ConnectionManager(uWS::Hub& h, std::string protoName)
 
 		auto addr = ws->getAddress();
 		Ip ip;
-		if (addr.family[0] == 'U' || Ip(addr.address).isLocal()) { // inefficient if using tcp
+		if (addr.family[0] == 'U'
+#ifndef DEBUG
+				|| Ip(addr.address).isLocal() // inefficient if using tcp
+#endif
+				) {
 			if (auto h = hd.getHeader("x-real-ip")) {
 				ip = Ip::fromString(h->data(), h->size());
 			} else {
